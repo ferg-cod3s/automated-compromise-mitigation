@@ -18,11 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - EditorConfig for consistent code style
 - Development tool version pinning via tools.go
 
+### Changed
+- Updated Go toolchain from 1.21 to 1.24.2
+- Updated gRPC from v1.60.1 to v1.76.0 for improved performance and security
+- Updated Protocol Buffers from v1.32.0 to v1.36.10
+- Updated Bubbletea TUI library from v0.25.0 to v1.3.10 with enhanced features
+- Updated Lipgloss styling from v0.9.1 to v1.1.0
+- Updated JWT library from v5.2.0 to v5.3.0
+- Updated all transitive dependencies to latest secure versions
+- Regenerated protocol buffer Go code with latest protoc versions
+
 ### Security
 - mTLS mutual authentication for service-client communication
 - Security scanning integration (gosec)
 - Vulnerability checking (govulncheck)
 - Certificate-based authentication infrastructure
+- Zero vulnerabilities found in actively used code paths (govulncheck verified)
 
 ## [0.1.0] - TBD
 
