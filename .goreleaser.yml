@@ -1,0 +1,162 @@
+version: 2
+
+project_name: acm
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+    # Run tests before building
+    - go test -v ./...
+    # Generate proto files if needed
+    - make proto-gen || true
+
+builds:
+  # ACM Service daemon
+  - id: acm-service
+    main: ./cmd/acm-service
+    binary: acm-service
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
+  # ACM CLI client
+  - id: acm-cli
+    main: ./cmd/acm-cli
+    binary: acm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
+archives:
+  - id: acm-archives
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - docs/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'typo'
+  groups:
+    - title: 'New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Security Updates'
+      regexp: '^.*?sec(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: 'Dependency Updates'
+      regexp: '^.*?deps(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: 'Other Changes'
+      order: 999
+
+release:
+  github:
+    owner: ferg-cod3s
+    name: automated-compromise-mitigation
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## ACM {{ .Tag }} Release
+
+    **Release Date:** {{ .Date }}
+
+    ### Installation
+
+    Download the appropriate binary for your platform below, or use the installation script:
+
+    ```bash
+    # Linux/macOS
+    curl -sSL https://github.com/ferg-cod3s/automated-compromise-mitigation/releases/download/{{ .Tag }}/install.sh | sh
+
+    # Or download directly
+    wget https://github.com/ferg-cod3s/automated-compromise-mitigation/releases/download/{{ .Tag }}/acm_{{ .Version }}_Linux_x86_64.tar.gz
+    ```
+
+    ### What's New
+
+  footer: |
+    ---
+
+    ### Verification
+
+    You can verify the integrity of the downloaded files using the checksums:
+
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+
+    ### SBOM (Software Bill of Materials)
+
+    Software Bill of Materials (SBOM) files are available as artifacts in this release for supply chain security.
+
+    ---
+
+    **Full Changelog**: https://github.com/ferg-cod3s/automated-compromise-mitigation/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    **Security Notice**: This is a security-critical application. Please review the [security documentation](https://github.com/ferg-cod3s/automated-compromise-mitigation/blob/main/acm-security-planning.md) before deployment.

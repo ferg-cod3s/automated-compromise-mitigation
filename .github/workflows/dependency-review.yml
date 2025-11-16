@@ -1,0 +1,136 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@5bbc3ba658137598168acb2ab73b21c432dd411b # v4.2.5
+        with:
+          fail-on-severity: critical
+          deny-licenses: GPL-3.0, AGPL-3.0
+          comment-summary-in-pr: always
+
+  govulncheck:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Go
+        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  dependency-analysis:
+    name: Analyze Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Go
+        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Analyze direct dependencies
+        run: |
+          echo "## 📦 Direct Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f go.mod ]; then
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            go list -m -f '{{if not .Indirect}}{{.Path}} {{.Version}}{{end}}' all | grep -v "^$" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No go.mod file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for dependency updates
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔄 Available Updates" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f go.mod ]; then
+            go list -u -m -f '{{if and (not .Indirect) .Update}}{{.Path}}: {{.Version}} → {{.Update.Version}}{{end}}' all > /tmp/updates.txt
+
+            if [ -s /tmp/updates.txt ]; then
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              cat /tmp/updates.txt >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ All dependencies are up-to-date" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+  license-compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Go
+        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@latest
+
+      - name: Check licenses
+        run: |
+          echo "## 📄 License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -d cmd ]; then
+            # Check for forbidden licenses
+            FORBIDDEN_LICENSES="GPL-3.0,AGPL-3.0,LGPL-3.0"
+
+            go-licenses check ./... --disallowed_types="$FORBIDDEN_LICENSES" || {
+              echo "❌ Found forbidden licenses!" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            }
+
+            # Generate license report
+            echo "✅ All dependencies use acceptable licenses" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>View all licenses</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            go-licenses report ./... >> $GITHUB_STEP_SUMMARY 2>&1 || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No cmd directory found - skipping license check" >> $GITHUB_STEP_SUMMARY
+          fi
