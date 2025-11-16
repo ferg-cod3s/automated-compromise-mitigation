@@ -12,7 +12,7 @@ package acm.v1;
 
 import "acm/v1/common.proto";
 
-option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1";
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1;acmv1";
 
 // AuditService provides audit logging and verification capabilities.
 // All ACM operations are logged to a local SQLite database with cryptographic

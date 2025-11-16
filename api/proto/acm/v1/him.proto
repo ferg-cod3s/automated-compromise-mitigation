@@ -12,7 +12,7 @@ package acm.v1;
 
 import "acm/v1/common.proto";
 
-option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1";
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1;acmv1";
 
 // HIMService provides Human-in-the-Middle workflow management.
 // When automated credential rotation encounters barriers that require human

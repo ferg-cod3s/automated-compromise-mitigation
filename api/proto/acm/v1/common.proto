@@ -9,7 +9,7 @@ syntax = "proto3";
 
 package acm.v1;
 
-option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1";
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1;acmv1";
 
 // Status represents the execution status of an operation.
 // Used across all services to indicate success, failure, or pending states.
