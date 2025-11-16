@@ -1,0 +1,166 @@
+# golangci-lint configuration for ACM
+# Security-focused linting configuration
+
+run:
+  timeout: 10m
+  tests: true
+  build-tags:
+    - integration
+  skip-dirs:
+    - vendor
+    - third_party
+  modules-download-mode: readonly
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: false
+  sort-results: true
+
+linters:
+  enable:
+    # Security
+    - gosec          # Security issues
+    - exportloopref  # Exported loop variable issues
+    
+    # Code Quality
+    - gofmt          # Formatting
+    - goimports      # Import formatting
+    - govet          # Suspicious code
+    - errcheck       # Unchecked errors
+    - staticcheck    # Static analysis
+    - unused         # Unused code
+    - ineffassign    # Ineffectual assignments
+    - typecheck      # Type checking
+    
+    # Performance
+    - prealloc       # Slice preallocation
+    - bodyclose      # HTTP response body closing
+    
+    # Style
+    - revive         # Golint replacement
+    - stylecheck     # Style checks
+    - misspell       # Spelling
+    
+    # Complexity
+    - gocyclo        # Cyclomatic complexity
+    - gocognit       # Cognitive complexity
+    - nestif         # Nested if statements
+    
+    # Best Practices
+    - unconvert      # Unnecessary conversions
+    - unparam        # Unused function parameters
+    - wastedassign   # Wasted assignments
+    - whitespace     # Whitespace issues
+    
+  disable:
+    - exhaustive     # Can be too strict
+    - exhaustivestruct # Can be too strict
+    - gomnd          # Magic number detection - too strict for now
+
+linters-settings:
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104  # Audit errors not checked (covered by errcheck)
+    config:
+      # Security rules
+      G101: "(?i)passwd|password|token|secret|key"  # Look for hardcoded credentials
+      G102: "net/http"
+      G103: "unsafe"
+      G104: "errors"
+      G106: "ssh"
+      G107: "http"
+      
+  gocyclo:
+    min-complexity: 15
+    
+  gocognit:
+    min-complexity: 20
+    
+  nestif:
+    min-complexity: 5
+    
+  revive:
+    severity: warning
+    rules:
+      - name: exported
+        severity: warning
+      - name: package-comments
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: indent-error-flow
+        severity: warning
+      - name: if-return
+        severity: warning
+      - name: superfluous-else
+        severity: warning
+      - name: modifies-parameter
+        severity: warning
+      - name: confusing-results
+        severity: warning
+      - name: deep-exit
+        severity: warning
+      - name: unused-parameter
+        severity: warning
+        
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003"]
+    
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - fmt.Fprintf
+      - fmt.Fprintln
+      
+  govet:
+    check-shadowing: true
+    enable-all: true
+    
+  misspell:
+    locale: US
+    
+  unparam:
+    check-exported: false
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+        - unparam
+        
+    # Exclude some linters from running on generated files
+    - path: \.pb\.go$
+      linters:
+        - gofmt
+        - goimports
+        - revive
+        - stylecheck
+        - unused
+        
+    # Exclude specific rules for test files
+    - path: _test\.go
+      text: "G404:"  # Use of weak random number generator (acceptable in tests)
+      
+  exclude-use-default: false
+  
+severity:
+  default-severity: warning
+  rules:
+    - linters:
+        - gosec
+      severity: error
+    - linters:
+        - errcheck
+      severity: error

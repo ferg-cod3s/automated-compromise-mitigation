@@ -1,0 +1,86 @@
+{
+  "categories": [
+    {
+      "title": "## 🔒 Security Updates",
+      "labels": ["security", "sec"]
+    },
+    {
+      "title": "## 🚀 New Features",
+      "labels": ["feature", "enhancement", "feat"]
+    },
+    {
+      "title": "## 🐛 Bug Fixes",
+      "labels": ["bug", "fix"]
+    },
+    {
+      "title": "## ⚡ Performance Improvements",
+      "labels": ["performance", "perf"]
+    },
+    {
+      "title": "## 📚 Documentation",
+      "labels": ["documentation", "docs"]
+    },
+    {
+      "title": "## 🔄 Dependency Updates",
+      "labels": ["dependencies", "deps"]
+    },
+    {
+      "title": "## 🏗️ Infrastructure & CI/CD",
+      "labels": ["ci", "infrastructure"]
+    },
+    {
+      "title": "## 🧹 Maintenance",
+      "labels": ["chore", "maintenance"]
+    }
+  ],
+  "ignore_labels": [
+    "ignore-for-release"
+  ],
+  "sort": "ASC",
+  "template": "${{CHANGELOG}}",
+  "pr_template": "- ${{TITLE}} (#${{NUMBER}})",
+  "empty_template": "- No changes",
+  "label_extractor": [
+    {
+      "pattern": "^sec(\\(.*\\))?:",
+      "target": "security"
+    },
+    {
+      "pattern": "^feat(\\(.*\\))?:",
+      "target": "feature"
+    },
+    {
+      "pattern": "^fix(\\(.*\\))?:",
+      "target": "bug"
+    },
+    {
+      "pattern": "^perf(\\(.*\\))?:",
+      "target": "performance"
+    },
+    {
+      "pattern": "^docs(\\(.*\\))?:",
+      "target": "documentation"
+    },
+    {
+      "pattern": "^deps(\\(.*\\))?:",
+      "target": "dependencies"
+    },
+    {
+      "pattern": "^ci(\\(.*\\))?:",
+      "target": "ci"
+    }
+  ],
+  "transformers": [
+    {
+      "pattern": "[\\-\\*] (\\[(...|TEST|CI|SKIP)\\])( )?(.+?)\n(.+?[\\-\\*] )(.+)",
+      "target": "- $4\n  - $6"
+    }
+  ],
+  "max_tags_to_fetch": 200,
+  "max_pull_requests": 200,
+  "max_back_track_time_days": 365,
+  "exclude_merge_branches": [],
+  "tag_resolver": {
+    "method": "semver"
+  }
+}

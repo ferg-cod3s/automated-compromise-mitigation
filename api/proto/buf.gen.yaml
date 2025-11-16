@@ -1,0 +1,59 @@
+# Copyright 2025 ACM Project
+# SPDX-License-Identifier: Apache-2.0
+
+# Buf code generation configuration for ACM Protocol Buffers
+# This file configures how protoc plugins generate code from .proto files.
+# For more information: https://buf.build/docs/configuration/v1/buf-gen-yaml
+
+version: v1
+
+# Managed mode: buf will automatically set go_package options
+# This ensures consistent import paths for generated code
+managed:
+  enabled: true
+  go_package_prefix:
+    default: github.com/ferg-cod3s/automated-compromise-mitigation
+    except:
+      - buf.build/googleapis/googleapis
+
+# Plugin configurations for code generation
+plugins:
+  # Generate Go protobuf code
+  - plugin: go
+    out: .
+    opt:
+      - paths=source_relative
+      # Generate lighter-weight code without reflection (optional)
+      # - Mlite_runtime=true
+
+  # Generate Go gRPC service code
+  - plugin: go-grpc
+    out: .
+    opt:
+      - paths=source_relative
+      # Require unimplemented server stubs for forward compatibility
+      - require_unimplemented_servers=true
+
+  # Optional: Generate gRPC-Gateway HTTP/JSON transcoding (for REST API)
+  # Uncomment if you want to expose REST endpoints alongside gRPC
+  # - plugin: grpc-gateway
+  #   out: .
+  #   opt:
+  #     - paths=source_relative
+  #     - generate_unbound_methods=true
+
+  # Optional: Generate OpenAPI v2 (Swagger) documentation
+  # Uncomment if you want to generate API documentation
+  # - plugin: openapiv2
+  #   out: api/openapi
+  #   opt:
+  #     - json_names_for_fields=false
+  #     - simple_operation_ids=true
+
+  # Optional: Generate validation code (e.g., using protoc-gen-validate)
+  # Uncomment if you want compile-time validation of message fields
+  # - plugin: validate
+  #   out: .
+  #   opt:
+  #     - paths=source_relative
+  #     - lang=go

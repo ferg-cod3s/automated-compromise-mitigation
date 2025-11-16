@@ -1,0 +1,88 @@
+// ACM API v1 - gRPC Protocol Buffer Definitions
+//
+// This file defines the gRPC API for the ACM (Automated Compromise Mitigation) service.
+// The API follows these principles:
+//   - Zero-knowledge: No passwords or keys in API requests/responses
+//   - Secure by default: All communication over mTLS
+//   - Streaming support: Real-time HIM prompts and responses
+//
+// TODO Phase 1: Complete service and message definitions
+
+syntax = "proto3";
+
+package acm.v1;
+
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1;acmv1";
+
+// CredentialService handles credential detection and rotation operations.
+service CredentialService {
+  // DetectCompromised queries the password manager for compromised credentials.
+  rpc DetectCompromised(DetectRequest) returns (DetectResponse);
+
+  // RotateCredential performs a credential rotation operation.
+  rpc RotateCredential(RotateRequest) returns (RotateResponse);
+
+  // GetRotationStatus retrieves the status of a rotation operation.
+  rpc GetRotationStatus(StatusRequest) returns (StatusResponse);
+
+  // GetRotationHistory retrieves the rotation history for a credential.
+  rpc GetRotationHistory(HistoryRequest) returns (HistoryResponse);
+}
+
+// AuditService handles audit log queries and integrity verification.
+service AuditService {
+  // QueryLogs retrieves audit events matching the filter criteria.
+  rpc QueryLogs(QueryRequest) returns (QueryResponse);
+
+  // VerifyIntegrity verifies the cryptographic signatures of audit entries.
+  rpc VerifyIntegrity(VerifyRequest) returns (VerifyResponse);
+
+  // GetStatistics returns aggregate statistics from the audit log.
+  rpc GetStatistics(StatsRequest) returns (StatsResponse);
+
+  // ExportReport generates a compliance report in the specified format.
+  rpc ExportReport(ExportRequest) returns (stream ExportChunk);
+}
+
+// HIMService handles Human-in-the-Middle workflows.
+service HIMService {
+  // PromptUser sends prompts to the user and receives responses via streaming.
+  rpc PromptUser(stream HIMMessage) returns (stream HIMMessage);
+
+  // GetSessionState retrieves the current state of a HIM session.
+  rpc GetSessionState(SessionRequest) returns (SessionResponse);
+
+  // CancelSession cancels an in-progress HIM session.
+  rpc CancelSession(CancelRequest) returns (CancelResponse);
+
+  // ListActiveSessions returns all active HIM sessions.
+  rpc ListActiveSessions(ListSessionsRequest) returns (ListSessionsResponse);
+}
+
+// HealthService provides service health and status information.
+service HealthService {
+  // Check returns the health status of the service and its components.
+  rpc Check(HealthRequest) returns (HealthResponse);
+}
+
+// TODO Phase 1: Define message types for:
+//   - DetectRequest, DetectResponse
+//   - RotateRequest, RotateResponse
+//   - StatusRequest, StatusResponse
+//   - HistoryRequest, HistoryResponse
+//   - QueryRequest, QueryResponse
+//   - VerifyRequest, VerifyResponse
+//   - StatsRequest, StatsResponse
+//   - ExportRequest, ExportChunk
+//   - HIMMessage
+//   - SessionRequest, SessionResponse
+//   - CancelRequest, CancelResponse
+//   - ListSessionsRequest, ListSessionsResponse
+//   - HealthRequest, HealthResponse
+//
+// Each message should include:
+//   - Field documentation
+//   - Validation constraints (min/max, required fields)
+//   - Example values in comments
+//
+// Reference: acm-tad.md Appendix A for detailed API specification

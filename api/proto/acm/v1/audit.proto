@@ -1,0 +1,443 @@
+// Copyright 2025 ACM Project
+// SPDX-License-Identifier: Apache-2.0
+
+// Audit Service API definitions.
+// This service provides cryptographically-signed audit logging for all
+// credential rotation operations, compliance validations, and HIM interactions.
+// Audit logs are tamper-evident and can be exported for compliance reporting.
+
+syntax = "proto3";
+
+package acm.v1;
+
+import "acm/v1/common.proto";
+
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1";
+
+// AuditService provides audit logging and verification capabilities.
+// All ACM operations are logged to a local SQLite database with cryptographic
+// signatures to ensure tamper-evidence. This service allows querying logs,
+// verifying integrity, and exporting audit reports.
+service AuditService {
+  // QueryLogs retrieves audit events based on filter criteria.
+  // Supports pagination for large result sets.
+  //
+  // Security: Sensitive fields in audit logs are encrypted.
+  // Credential IDs are hashed (SHA-256) before storage.
+  rpc QueryLogs(QueryRequest) returns (QueryResponse);
+
+  // VerifyIntegrity checks the cryptographic integrity of audit logs.
+  // Verifies Ed25519 signatures on all audit entries to detect tampering.
+  //
+  // Returns verification status and list of any entries with invalid signatures.
+  rpc VerifyIntegrity(VerifyRequest) returns (VerifyResponse);
+
+  // ExportReport generates an audit report in various formats.
+  // Supports PDF and JSON export for compliance and archival purposes.
+  //
+  // Reports include evidence chains (if ACVS enabled) and cryptographic proofs.
+  rpc ExportReport(ExportRequest) returns (ExportResponse);
+
+  // GetStatistics returns aggregate statistics about audit events.
+  // Useful for dashboard views and compliance reporting.
+  rpc GetStatistics(StatisticsRequest) returns (StatisticsResponse);
+}
+
+// QueryRequest specifies criteria for querying audit logs.
+message QueryRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Filter criteria for audit events
+  AuditFilter filter = 2;
+
+  // Pagination parameters
+  PaginationRequest pagination = 3;
+
+  // Sort order (default: descending by timestamp)
+  SortOrder sort_order = 4;
+}
+
+// AuditFilter defines filtering criteria for audit log queries.
+message AuditFilter {
+  // Filter by event type
+  repeated AuditEventType event_types = 1;
+
+  // Filter by time range - start time (Unix seconds)
+  int64 start_time = 2;
+
+  // Filter by time range - end time (Unix seconds)
+  int64 end_time = 3;
+
+  // Filter by specific credential ID hashes
+  repeated string credential_id_hashes = 4;
+
+  // Filter by event status
+  repeated string statuses = 5;
+
+  // Filter by action types
+  repeated string actions = 6;
+
+  // Filter events with compliance validation only
+  bool only_compliance_events = 7;
+
+  // Filter events requiring HIM only
+  bool only_him_events = 8;
+
+  // Search query (matches credential sites, usernames, etc.)
+  string search_query = 9;
+}
+
+// SortOrder specifies how to sort query results.
+enum SortOrder {
+  // Default value, should not be used
+  SORT_ORDER_UNSPECIFIED = 0;
+
+  // Sort by timestamp, newest first
+  SORT_ORDER_DESC = 1;
+
+  // Sort by timestamp, oldest first
+  SORT_ORDER_ASC = 2;
+}
+
+// QueryResponse returns audit events matching the query.
+message QueryResponse {
+  // Response status
+  Status status = 1;
+
+  // List of audit events
+  repeated AuditEvent events = 2;
+
+  // Pagination information
+  PaginationResponse pagination = 3;
+
+  // Error details if status is not SUCCESS
+  Error error = 4;
+}
+
+// AuditEvent represents a single audit log entry.
+message AuditEvent {
+  // Unique event ID (auto-incremented)
+  int64 id = 1;
+
+  // Timestamp when event occurred (Unix seconds)
+  int64 timestamp = 2;
+
+  // Event type classification
+  AuditEventType event_type = 3;
+
+  // Hashed credential ID (SHA-256, never plaintext)
+  string credential_id_hash = 4;
+
+  // Action performed (e.g., "detected", "rotated", "skipped", "failed")
+  string action = 5;
+
+  // Status of the action
+  string status = 6;
+
+  // Site/domain affected (may be encrypted if sensitive)
+  string site = 7;
+
+  // Username affected (may be encrypted if sensitive)
+  string username = 8;
+
+  // Additional details as JSON (encrypted if sensitive)
+  string details_json = 9;
+
+  // Compliance Rule Set (CRC) rule ID applied (if ACVS enabled)
+  string crc_rule_id = 10;
+
+  // Evidence chain entry ID (if ACVS enabled)
+  string evidence_chain_id = 11;
+
+  // Cryptographic signature (Ed25519) of the event
+  // Signature is over: id || timestamp || credential_id_hash || action
+  string signature = 12;
+
+  // Client certificate fingerprint that initiated the action
+  string client_cert_fingerprint = 13;
+
+  // Request ID from the originating request
+  string request_id = 14;
+
+  // Whether HIM was required for this event
+  bool required_him = 15;
+
+  // HIM prompt type (if required_him = true)
+  string him_type = 16;
+
+  // Duration of operation in milliseconds
+  int64 duration_ms = 17;
+}
+
+// AuditEventType classifies the type of audit event.
+enum AuditEventType {
+  // Default value, should not be used
+  AUDIT_EVENT_TYPE_UNSPECIFIED = 0;
+
+  // Credential rotation operation
+  AUDIT_EVENT_TYPE_ROTATION = 1;
+
+  // Compromised credential detection
+  AUDIT_EVENT_TYPE_DETECTION = 2;
+
+  // Compliance validation check (ACVS)
+  AUDIT_EVENT_TYPE_COMPLIANCE_CHECK = 3;
+
+  // Human-in-the-Middle prompt
+  AUDIT_EVENT_TYPE_HIM_PROMPT = 4;
+
+  // Password generation
+  AUDIT_EVENT_TYPE_PASSWORD_GENERATION = 5;
+
+  // Configuration change
+  AUDIT_EVENT_TYPE_CONFIG_CHANGE = 6;
+
+  // Authentication event (client certificate validation)
+  AUDIT_EVENT_TYPE_AUTHENTICATION = 7;
+
+  // Service lifecycle event (start, stop, restart)
+  AUDIT_EVENT_TYPE_SERVICE_LIFECYCLE = 8;
+
+  // Certificate operation (issue, renew, revoke)
+  AUDIT_EVENT_TYPE_CERTIFICATE_OPERATION = 9;
+
+  // Audit log verification
+  AUDIT_EVENT_TYPE_VERIFICATION = 10;
+}
+
+// VerifyRequest initiates audit log integrity verification.
+message VerifyRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Start time for verification range (Unix seconds, 0 for all)
+  int64 start_time = 2;
+
+  // End time for verification range (Unix seconds, 0 for all)
+  int64 end_time = 3;
+
+  // Public key for signature verification (if not using default)
+  bytes public_key = 4;
+
+  // Whether to verify evidence chain links (if ACVS enabled)
+  bool verify_evidence_chain = 5;
+}
+
+// VerifyResponse returns audit log integrity verification results.
+message VerifyResponse {
+  // Response status
+  Status status = 1;
+
+  // Overall verification result
+  bool integrity_valid = 2;
+
+  // Number of events verified
+  int64 events_verified = 3;
+
+  // Number of events with invalid signatures
+  int64 invalid_signatures = 4;
+
+  // List of event IDs with verification failures
+  repeated int64 failed_event_ids = 5;
+
+  // Detailed verification errors
+  repeated VerificationError errors = 6;
+
+  // Timestamp when verification was performed (Unix seconds)
+  int64 verification_timestamp = 7;
+
+  // Evidence chain verification result (if verify_evidence_chain = true)
+  EvidenceChainVerification evidence_chain_verification = 8;
+}
+
+// VerificationError describes a specific verification failure.
+message VerificationError {
+  // Event ID that failed verification
+  int64 event_id = 1;
+
+  // Reason for failure
+  string reason = 2;
+
+  // Expected signature (if applicable)
+  string expected_signature = 3;
+
+  // Actual signature found
+  string actual_signature = 4;
+}
+
+// EvidenceChainVerification contains evidence chain verification results.
+// Phase I: Not used (ACVS is Phase II)
+// Phase II+: Contains Merkle tree verification status
+message EvidenceChainVerification {
+  // Whether evidence chain is valid
+  bool chain_valid = 1;
+
+  // Number of evidence chain entries verified
+  int64 entries_verified = 2;
+
+  // Root hash of evidence chain
+  string root_hash = 3;
+
+  // List of broken chain links (if any)
+  repeated int64 broken_links = 4;
+}
+
+// ExportRequest initiates an audit report export.
+message ExportRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Export format
+  ReportFormat format = 2;
+
+  // Filter criteria for events to include
+  AuditFilter filter = 3;
+
+  // Whether to include cryptographic proofs
+  bool include_signatures = 4;
+
+  // Whether to include evidence chain (if ACVS enabled)
+  bool include_evidence_chain = 5;
+
+  // Report title (for PDF export)
+  string report_title = 6;
+
+  // Additional report metadata
+  map<string, string> report_metadata = 7;
+}
+
+// ReportFormat specifies the format for audit report export.
+enum ReportFormat {
+  // Default value, should not be used
+  REPORT_FORMAT_UNSPECIFIED = 0;
+
+  // JSON format (structured data)
+  REPORT_FORMAT_JSON = 1;
+
+  // PDF format (human-readable document)
+  REPORT_FORMAT_PDF = 2;
+
+  // CSV format (spreadsheet-compatible)
+  REPORT_FORMAT_CSV = 3;
+
+  // HTML format (web-viewable)
+  REPORT_FORMAT_HTML = 4;
+}
+
+// ExportResponse returns the generated audit report.
+message ExportResponse {
+  // Response status
+  Status status = 1;
+
+  // Report content (base64-encoded for binary formats like PDF)
+  bytes report_content = 2;
+
+  // Report format
+  ReportFormat format = 3;
+
+  // Report filename (suggested)
+  string filename = 4;
+
+  // Report size in bytes
+  int64 size_bytes = 5;
+
+  // Number of events included in report
+  int64 events_count = 6;
+
+  // Report generation timestamp (Unix seconds)
+  int64 generated_at = 7;
+
+  // Report SHA-256 hash (for integrity verification)
+  string content_hash = 8;
+
+  // Error details if status is not SUCCESS
+  Error error = 9;
+}
+
+// StatisticsRequest requests audit log statistics.
+message StatisticsRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Time range for statistics - start time (Unix seconds)
+  int64 start_time = 2;
+
+  // Time range for statistics - end time (Unix seconds)
+  int64 end_time = 3;
+
+  // Group statistics by time period
+  TimePeriod group_by = 4;
+}
+
+// TimePeriod specifies time grouping for statistics.
+enum TimePeriod {
+  // Default value, should not be used
+  TIME_PERIOD_UNSPECIFIED = 0;
+
+  // Group by hour
+  TIME_PERIOD_HOUR = 1;
+
+  // Group by day
+  TIME_PERIOD_DAY = 2;
+
+  // Group by week
+  TIME_PERIOD_WEEK = 3;
+
+  // Group by month
+  TIME_PERIOD_MONTH = 4;
+}
+
+// StatisticsResponse returns audit log statistics.
+message StatisticsResponse {
+  // Response status
+  Status status = 1;
+
+  // Total number of audit events
+  int64 total_events = 2;
+
+  // Breakdown by event type
+  map<string, int64> events_by_type = 3;
+
+  // Breakdown by status
+  map<string, int64> events_by_status = 4;
+
+  // Number of successful rotations
+  int64 successful_rotations = 5;
+
+  // Number of failed rotations
+  int64 failed_rotations = 6;
+
+  // Number of HIM interventions
+  int64 him_interventions = 7;
+
+  // Number of compliance checks (if ACVS enabled)
+  int64 compliance_checks = 8;
+
+  // Average rotation duration in milliseconds
+  int64 avg_rotation_duration_ms = 9;
+
+  // Time series data (if group_by specified)
+  repeated TimeSeriesDataPoint time_series = 10;
+
+  // Error details if status is not SUCCESS
+  Error error = 11;
+}
+
+// TimeSeriesDataPoint represents statistics for a specific time period.
+message TimeSeriesDataPoint {
+  // Timestamp of the period (Unix seconds)
+  int64 timestamp = 1;
+
+  // Number of events in this period
+  int64 event_count = 2;
+
+  // Breakdown by event type
+  map<string, int64> events_by_type = 3;
+
+  // Number of successful operations
+  int64 success_count = 4;
+
+  // Number of failed operations
+  int64 failure_count = 5;
+}

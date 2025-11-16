@@ -30,3 +30,31 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# ACM-specific ignores
+bin/
+build/
+dist/
+
+# Generated protobuf code (will be generated during build)
+**/*.pb.go
+
+# ACM runtime data (user-specific)
+.acm/
+*.db
+*.db-shm
+*.db-wal
+
+# Certificates and keys (NEVER commit these)
+*.pem
+*.key
+*.crt
+*.csr
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

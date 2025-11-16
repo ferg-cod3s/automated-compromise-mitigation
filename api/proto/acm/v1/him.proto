@@ -1,0 +1,313 @@
+// Copyright 2025 ACM Project
+// SPDX-License-Identifier: Apache-2.0
+
+// Human-in-the-Middle (HIM) Service API definitions.
+// This service orchestrates workflows requiring user intervention when automation
+// encounters MFA, CAPTCHA, or ToS restrictions. It uses bidirectional streaming
+// to maintain context across multi-step user interactions.
+
+syntax = "proto3";
+
+package acm.v1;
+
+import "acm/v1/common.proto";
+
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1";
+
+// HIMService provides Human-in-the-Middle workflow management.
+// When automated credential rotation encounters barriers that require human
+// intervention (MFA codes, CAPTCHA solving, manual password changes), this
+// service manages the interaction with the user and resumes automation.
+//
+// Security: HIM prompts NEVER request the master password or vault credentials.
+// All user input is transmitted over mTLS and not logged in plaintext.
+service HIMService {
+  // PromptUser initiates a bidirectional streaming RPC for HIM workflows.
+  // The service sends prompts to the client, which displays them to the user
+  // and sends back responses. This allows multi-step interactions like:
+  // 1. Service: "Enter TOTP code"
+  // 2. User: "123456"
+  // 3. Service: "Code accepted, resuming rotation..."
+  //
+  // The stream remains open until the HIM workflow completes, times out,
+  // or is cancelled by the user.
+  //
+  // Security: All data transmitted over mTLS. User input is never logged.
+  // Prompts include visual indicators to prevent phishing attacks.
+  rpc PromptUser(stream HIMPrompt) returns (stream HIMResponse);
+
+  // GetHIMStatus retrieves the current status of an active HIM workflow.
+  // Useful for clients to check if there are pending HIM requests.
+  rpc GetHIMStatus(HIMStatusRequest) returns (HIMStatusResponse);
+
+  // CancelHIM cancels an active HIM workflow.
+  // The associated rotation operation will be marked as cancelled.
+  rpc CancelHIM(CancelHIMRequest) returns (CancelHIMResponse);
+}
+
+// HIMPrompt is sent from service to client requesting user intervention.
+// This message flows: Service -> Client
+message HIMPrompt {
+  // Unique HIM session ID for tracking this workflow
+  string session_id = 1;
+
+  // Operation ID that triggered this HIM request
+  string operation_id = 2;
+
+  // Type of HIM intervention required
+  HIMType him_type = 3;
+
+  // Site/domain where HIM is needed
+  string site = 4;
+
+  // Credential username for context
+  string username = 5;
+
+  // Human-readable prompt message
+  string message = 6;
+
+  // Expected input format (e.g., "6-digit code", "yes/no", "click when done")
+  string expected_input_format = 7;
+
+  // Timeout for user response in seconds (0 = no timeout)
+  int64 timeout_seconds = 8;
+
+  // Timestamp when prompt was sent (Unix seconds)
+  int64 prompt_timestamp = 9;
+
+  // Whether this is a retry after previous failed attempt
+  bool is_retry = 10;
+
+  // Number of attempts remaining (0 = unlimited)
+  int32 attempts_remaining = 11;
+
+  // Additional context or instructions
+  map<string, string> context = 12;
+
+  // Optional URL for user to visit (e.g., password reset page)
+  string action_url = 13;
+
+  // Security token to prevent CSRF attacks on HIM prompts
+  // Client must echo this back in HIMResponse
+  string security_token = 14;
+}
+
+// HIMType specifies the type of human intervention required.
+enum HIMType {
+  // Default value, should not be used
+  HIM_TYPE_UNSPECIFIED = 0;
+
+  // Time-based One-Time Password (TOTP) - 6-digit code
+  HIM_TYPE_TOTP = 1;
+
+  // SMS verification code
+  HIM_TYPE_SMS = 2;
+
+  // Push notification approval
+  HIM_TYPE_PUSH_NOTIFICATION = 3;
+
+  // Email verification code
+  HIM_TYPE_EMAIL_CODE = 4;
+
+  // CAPTCHA challenge
+  HIM_TYPE_CAPTCHA = 5;
+
+  // Security questions
+  HIM_TYPE_SECURITY_QUESTIONS = 6;
+
+  // Manual password change required (no API available)
+  HIM_TYPE_MANUAL_CHANGE = 7;
+
+  // ToS violation - user must manually rotate
+  HIM_TYPE_TOS_VIOLATION = 8;
+
+  // Generic user confirmation
+  HIM_TYPE_USER_CONFIRMATION = 9;
+
+  // Biometric authentication
+  HIM_TYPE_BIOMETRIC = 10;
+
+  // Backup code entry
+  HIM_TYPE_BACKUP_CODE = 11;
+
+  // Recovery code entry
+  HIM_TYPE_RECOVERY_CODE = 12;
+}
+
+// HIMResponse is sent from client to service with user's input.
+// This message flows: Client -> Service
+message HIMResponse {
+  // HIM session ID (from HIMPrompt)
+  string session_id = 1;
+
+  // Security token (echoed from HIMPrompt to prevent CSRF)
+  string security_token = 2;
+
+  // User's response to the prompt
+  HIMResponseData response_data = 3;
+
+  // Timestamp when user responded (Unix seconds)
+  int64 response_timestamp = 4;
+
+  // Whether user wants to cancel the HIM workflow
+  bool cancel_requested = 5;
+
+  // Whether user wants to skip this credential rotation
+  bool skip_requested = 6;
+
+  // Client metadata (for audit trail)
+  Metadata metadata = 7;
+}
+
+// HIMResponseData contains the actual user input.
+message HIMResponseData {
+  // Text input (e.g., TOTP code, SMS code, answer)
+  string text_input = 1;
+
+  // Boolean input (e.g., yes/no, approve/deny)
+  bool boolean_input = 2;
+
+  // Confirmation that user completed manual action
+  bool action_completed = 3;
+
+  // Optional file upload (e.g., screenshot proof for compliance)
+  bytes file_data = 4;
+
+  // File name (if file_data provided)
+  string file_name = 5;
+
+  // Multiple choice selection (index of selected option)
+  int32 choice_index = 6;
+
+  // Additional data as key-value pairs
+  map<string, string> additional_data = 7;
+}
+
+// HIMStatusRequest queries the status of HIM workflows.
+message HIMStatusRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Specific session ID to query (optional, if empty returns all active)
+  string session_id = 2;
+
+  // Filter by operation ID
+  string operation_id = 3;
+
+  // Whether to include completed HIM sessions
+  bool include_completed = 4;
+}
+
+// HIMStatusResponse returns the status of HIM workflows.
+message HIMStatusResponse {
+  // Response status
+  Status status = 1;
+
+  // List of HIM sessions
+  repeated HIMSession sessions = 2;
+
+  // Number of active HIM sessions
+  int32 active_sessions_count = 3;
+
+  // Error details if status is not SUCCESS
+  Error error = 4;
+}
+
+// HIMSession represents the state of a HIM workflow.
+message HIMSession {
+  // Unique session ID
+  string session_id = 1;
+
+  // Associated operation ID
+  string operation_id = 2;
+
+  // HIM type
+  HIMType him_type = 3;
+
+  // Current state of the session
+  HIMState state = 4;
+
+  // Site/domain
+  string site = 5;
+
+  // Username
+  string username = 6;
+
+  // When session started (Unix seconds)
+  int64 started_at = 7;
+
+  // When session completed (Unix seconds, 0 if not complete)
+  int64 completed_at = 8;
+
+  // Number of user response attempts made
+  int32 attempts_made = 9;
+
+  // Whether session timed out
+  bool timed_out = 10;
+
+  // Whether session was cancelled
+  bool cancelled = 11;
+
+  // Error if session failed
+  Error error = 12;
+}
+
+// HIMState represents the current state of a HIM session.
+enum HIMState {
+  // Default value, should not be used
+  HIM_STATE_UNSPECIFIED = 0;
+
+  // HIM session initialized but not yet sent to client
+  HIM_STATE_INITIALIZED = 1;
+
+  // Waiting for user input
+  HIM_STATE_AWAITING_INPUT = 2;
+
+  // Validating user's response
+  HIM_STATE_VALIDATING = 3;
+
+  // User response accepted, resuming automation
+  HIM_STATE_RESUMING = 4;
+
+  // HIM workflow completed successfully
+  HIM_STATE_COMPLETED = 5;
+
+  // HIM workflow failed (validation failed, timeout, etc.)
+  HIM_STATE_FAILED = 6;
+
+  // HIM workflow cancelled by user
+  HIM_STATE_CANCELLED = 7;
+
+  // HIM workflow timed out
+  HIM_STATE_TIMEOUT = 8;
+}
+
+// CancelHIMRequest requests cancellation of a HIM workflow.
+message CancelHIMRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Session ID to cancel
+  string session_id = 2;
+
+  // Reason for cancellation (for audit log)
+  string cancellation_reason = 3;
+}
+
+// CancelHIMResponse confirms HIM cancellation.
+message CancelHIMResponse {
+  // Response status
+  Status status = 1;
+
+  // Cancelled session ID
+  string session_id = 2;
+
+  // Whether session was successfully cancelled
+  bool cancelled = 3;
+
+  // Timestamp when cancellation occurred (Unix seconds)
+  int64 cancelled_at = 4;
+
+  // Error details if status is not SUCCESS
+  Error error = 5;
+}

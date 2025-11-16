@@ -1,0 +1,142 @@
+name: Proto Validation
+
+on:
+  pull_request:
+    paths:
+      - 'api/proto/**/*.proto'
+      - 'api/proto/**/*.go'
+      - '.github/workflows/proto.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'api/proto/**/*.proto'
+      - 'api/proto/**/*.go'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-proto:
+    name: Validate Protocol Buffers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Go
+        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: '25.1'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install protoc-gen-go and protoc-gen-go-grpc
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+
+      - name: Verify proto files are valid
+        run: |
+          # Find all .proto files and compile them to verify syntax
+          find api/proto -name "*.proto" -print0 | while IFS= read -r -d '' proto_file; do
+            echo "Validating $proto_file"
+            protoc --proto_path=api/proto \
+                   --go_out=paths=source_relative:/tmp/proto-check \
+                   --go-grpc_out=paths=source_relative:/tmp/proto-check \
+                   "$proto_file"
+          done
+
+      - name: Check generated code is up-to-date
+        run: |
+          # Generate proto code
+          make proto-gen || (echo "Run 'make proto-gen' to generate proto files" && exit 1)
+
+          # Check if there are any uncommitted changes
+          if ! git diff --quiet api/proto; then
+            echo "ERROR: Generated proto code is out of date!"
+            echo "Please run 'make proto-gen' and commit the changes."
+            echo ""
+            echo "Differences found:"
+            git diff api/proto
+            exit 1
+          fi
+
+          echo "✅ Generated proto code is up-to-date"
+
+  lint-proto:
+    name: Lint Protocol Buffers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Lint proto files with buf
+        uses: bufbuild/buf-setup-action@35c243d7f2a909b1d4e40399b348a7fdab27d78d # v1.28.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run buf lint
+        run: |
+          # Initialize buf if not already configured
+          if [ ! -f buf.yaml ]; then
+            echo "No buf.yaml found - skipping buf lint"
+            exit 0
+          fi
+
+          buf lint api/proto
+
+      - name: Check for breaking changes
+        if: github.event_name == 'pull_request'
+        run: |
+          # Skip if buf.yaml doesn't exist
+          if [ ! -f buf.yaml ]; then
+            echo "No buf.yaml found - skipping breaking change detection"
+            exit 0
+          fi
+
+          # Check against main branch
+          buf breaking api/proto --against '.git#branch=main'
+
+  proto-documentation:
+    name: Generate Proto Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: '25.1'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install protoc-gen-doc
+        run: |
+          go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@v1.5.1
+
+      - name: Generate proto documentation
+        run: |
+          # Generate markdown documentation from proto files
+          if [ -d api/proto ]; then
+            mkdir -p /tmp/proto-docs
+            find api/proto -name "*.proto" -print0 | while IFS= read -r -d '' proto_file; do
+              protoc --proto_path=api/proto \
+                     --doc_out=/tmp/proto-docs \
+                     --doc_opt=markdown,proto-api.md \
+                     "$proto_file"
+            done
+
+            echo "📚 Proto documentation generated"
+            cat /tmp/proto-docs/proto-api.md > $GITHUB_STEP_SUMMARY || true
+          fi

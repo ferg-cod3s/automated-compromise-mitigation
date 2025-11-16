@@ -1,0 +1,212 @@
+// Copyright 2025 ACM Project
+// SPDX-License-Identifier: Apache-2.0
+
+// Common types and messages used across ACM services.
+// This file contains shared data structures for error handling,
+// status codes, and metadata used by all ACM gRPC services.
+
+syntax = "proto3";
+
+package acm.v1;
+
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1";
+
+// Status represents the execution status of an operation.
+// Used across all services to indicate success, failure, or pending states.
+message Status {
+  // Status code indicating the result of an operation
+  StatusCode code = 1;
+
+  // Human-readable message providing details about the status
+  string message = 2;
+
+  // Additional context or details (e.g., stack trace, debug info)
+  // Should not contain sensitive information
+  map<string, string> details = 3;
+}
+
+// StatusCode represents possible operation outcomes.
+enum StatusCode {
+  // Default value, should not be used
+  STATUS_CODE_UNSPECIFIED = 0;
+
+  // Operation completed successfully
+  STATUS_CODE_SUCCESS = 1;
+
+  // Operation failed with an error
+  STATUS_CODE_FAILURE = 2;
+
+  // Operation is pending (e.g., awaiting HIM response)
+  STATUS_CODE_PENDING = 3;
+
+  // Operation requires Human-in-the-Middle intervention
+  STATUS_CODE_HIM_REQUIRED = 4;
+
+  // Operation blocked by compliance validation
+  STATUS_CODE_COMPLIANCE_BLOCKED = 5;
+
+  // Operation timed out
+  STATUS_CODE_TIMEOUT = 6;
+
+  // Operation was cancelled by user
+  STATUS_CODE_CANCELLED = 7;
+}
+
+// Error represents detailed error information.
+// Includes error codes, messages, and context for debugging.
+message Error {
+  // Unique error code for programmatic error handling
+  ErrorCode code = 1;
+
+  // Human-readable error message
+  string message = 2;
+
+  // Whether the operation can be retried
+  bool retryable = 3;
+
+  // Additional error context (e.g., field validation errors)
+  // Should not contain sensitive information
+  map<string, string> context = 4;
+
+  // Timestamp when the error occurred (Unix seconds)
+  int64 timestamp = 5;
+}
+
+// ErrorCode represents specific error conditions.
+enum ErrorCode {
+  // Default value, should not be used
+  ERROR_CODE_UNSPECIFIED = 0;
+
+  // Unknown or unclassified error
+  ERROR_CODE_UNKNOWN = 1;
+
+  // Invalid request parameters
+  ERROR_CODE_INVALID_REQUEST = 2;
+
+  // Requested resource not found
+  ERROR_CODE_NOT_FOUND = 3;
+
+  // Permission denied
+  ERROR_CODE_PERMISSION_DENIED = 4;
+
+  // Resource already exists
+  ERROR_CODE_ALREADY_EXISTS = 5;
+
+  // Resource exhausted (e.g., rate limit)
+  ERROR_CODE_RESOURCE_EXHAUSTED = 6;
+
+  // Password vault is locked
+  ERROR_CODE_VAULT_LOCKED = 7;
+
+  // Password manager CLI not found
+  ERROR_CODE_CLI_NOT_FOUND = 8;
+
+  // Network connectivity required but unavailable
+  ERROR_CODE_NETWORK_REQUIRED = 9;
+
+  // Human-in-the-Middle intervention required
+  ERROR_CODE_HIM_REQUIRED = 10;
+
+  // Compliance validation failed
+  ERROR_CODE_COMPLIANCE_VIOLATION = 11;
+
+  // Internal server error
+  ERROR_CODE_INTERNAL = 12;
+
+  // Service unavailable or degraded
+  ERROR_CODE_UNAVAILABLE = 13;
+
+  // Operation deadline exceeded
+  ERROR_CODE_DEADLINE_EXCEEDED = 14;
+
+  // Certificate authentication failed
+  ERROR_CODE_AUTH_FAILED = 15;
+
+  // Session token expired or invalid
+  ERROR_CODE_TOKEN_INVALID = 16;
+}
+
+// Metadata contains common metadata fields used across requests and responses.
+message Metadata {
+  // Unique request ID for tracing and correlation
+  string request_id = 1;
+
+  // Client version (e.g., "acm-tui/1.0.0", "acm-gui/1.2.3")
+  string client_version = 2;
+
+  // Client certificate fingerprint (SHA-256) for audit trail
+  string client_cert_fingerprint = 3;
+
+  // Timestamp when request was initiated (Unix seconds)
+  int64 timestamp = 4;
+
+  // Optional trace context for distributed tracing
+  map<string, string> trace_context = 5;
+}
+
+// PasswordPolicy defines password generation and validation rules.
+// Used when generating new passwords during credential rotation.
+message PasswordPolicy {
+  // Password length (minimum 12, recommended 32)
+  int32 length = 1;
+
+  // Require at least one uppercase letter
+  bool require_uppercase = 2;
+
+  // Require at least one lowercase letter
+  bool require_lowercase = 3;
+
+  // Require at least one digit
+  bool require_numbers = 4;
+
+  // Require at least one special symbol
+  bool require_symbols = 5;
+
+  // Allowed special symbols (if empty, use default set)
+  string allowed_symbols = 6;
+
+  // Disallowed character sequences (e.g., "abc", "123")
+  repeated string disallowed_sequences = 7;
+
+  // Minimum unique characters required
+  int32 min_unique_chars = 8;
+}
+
+// PasswordManagerType represents supported password manager types.
+enum PasswordManagerType {
+  // Default value, should not be used
+  PASSWORD_MANAGER_TYPE_UNSPECIFIED = 0;
+
+  // 1Password (op CLI)
+  PASSWORD_MANAGER_TYPE_1PASSWORD = 1;
+
+  // Bitwarden (bw CLI)
+  PASSWORD_MANAGER_TYPE_BITWARDEN = 2;
+
+  // LastPass (lpass CLI)
+  PASSWORD_MANAGER_TYPE_LASTPASS = 3;
+
+  // Unix pass (pass CLI)
+  PASSWORD_MANAGER_TYPE_PASS = 4;
+}
+
+// PaginationRequest contains pagination parameters for list operations.
+message PaginationRequest {
+  // Page size (maximum number of items to return)
+  int32 page_size = 1;
+
+  // Page token from previous response (for next page)
+  string page_token = 2;
+}
+
+// PaginationResponse contains pagination metadata in responses.
+message PaginationResponse {
+  // Token for fetching next page (empty if no more pages)
+  string next_page_token = 1;
+
+  // Total number of items available (optional, may be expensive to compute)
+  int64 total_items = 2;
+
+  // Number of items in current response
+  int32 items_in_page = 3;
+}
