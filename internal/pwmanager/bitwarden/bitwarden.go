@@ -327,8 +327,8 @@ func parseTime(timeStr string) time.Time {
 }
 
 func getFirstURI(uris []struct {
-	Match int
-	URI   string
+	Match int    `json:"match,omitempty"`
+	URI   string `json:"uri"`
 }) string {
 	if len(uris) > 0 {
 		return uris[0].URI

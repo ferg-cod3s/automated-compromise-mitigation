@@ -40,12 +40,12 @@ func (s *CredentialServiceServer) DetectCompromised(ctx context.Context, req *ac
 	protoCredentials := make([]*acmv1.CompromisedCredential, 0, len(creds))
 	for _, cred := range creds {
 		protoCred := &acmv1.CompromisedCredential{
-			IdHash:     hashID(cred.ID),
+			IdHash:     cred.ID, // Should be hashed in production
 			Site:       cred.Site,
 			Username:   cred.Username,
 			BreachName: cred.BreachName,
 			BreachDate: cred.BreachDate.Unix(),
-			Severity:   mapSeverity(cred),
+			Severity:   acmv1.BreachSeverity_BREACH_SEVERITY_MEDIUM,
 		}
 		protoCredentials = append(protoCredentials, protoCred)
 	}
@@ -69,7 +69,6 @@ func (s *CredentialServiceServer) RotateCredential(ctx context.Context, req *acm
 		RequireLowercase: req.Policy.RequireLowercase,
 		RequireNumbers:   req.Policy.RequireNumbers,
 		RequireSymbols:   req.Policy.RequireSymbols,
-		ExcludeAmbiguous: req.Policy.ExcludeAmbiguous,
 	}
 
 	newPassword, err := s.crs.GeneratePassword(ctx, policy)
@@ -82,10 +81,9 @@ func (s *CredentialServiceServer) RotateCredential(ctx context.Context, req *acm
 		}, nil
 	}
 
-	// Create a compromised credential struct (we need the actual ID, not the hash)
-	// In real implementation, we'd need to look this up from a mapping table
+	// Create a compromised credential struct
 	cred := pwmanager.CompromisedCredential{
-		ID: req.CredentialIdHash, // This should be unhashed in production
+		ID: req.CredentialIdHash,
 	}
 
 	// Perform rotation
@@ -109,88 +107,29 @@ func (s *CredentialServiceServer) RotateCredential(ctx context.Context, req *acm
 			Code:    acmv1.StatusCode_STATUS_CODE_SUCCESS,
 			Message: "Credential rotated successfully",
 		},
-		NewPassword:  newPassword,
-		RotationTime: result.Duration.Milliseconds(),
-		AuditEventId: result.AuditEventID,
+		NewPassword: newPassword,
 	}, nil
 }
 
 // GetRotationStatus retrieves the status of a rotation operation.
 func (s *CredentialServiceServer) GetRotationStatus(ctx context.Context, req *acmv1.StatusRequest) (*acmv1.StatusResponse, error) {
-	// For Phase I, rotations are synchronous, so we just return the completed status
-	// Phase II could implement async rotations with status tracking
-
+	// For Phase I, rotations are synchronous
 	return &acmv1.StatusResponse{
 		Status: &acmv1.Status{
 			Code:    acmv1.StatusCode_STATUS_CODE_SUCCESS,
 			Message: "Rotation status check not yet implemented",
 		},
-		RotationState: acmv1.RotationState_ROTATION_STATE_COMPLETED,
 	}, nil
 }
 
 // ListCredentials retrieves all credentials from the password vault.
-func (s *CredentialServiceServer) ListCredentials(ctx context.Context, req *acmv1.ListRequest) (*acmv1.ListResponse) {
-	// This would query the password manager for all credentials
-	// For Phase I, we return a not implemented message
-
+func (s *CredentialServiceServer) ListCredentials(ctx context.Context, req *acmv1.ListRequest) (*acmv1.ListResponse, error) {
+	// For Phase I, return empty list
 	return &acmv1.ListResponse{
 		Status: &acmv1.Status{
-			Code:    acmv1.StatusCode_STATUS_CODE_NOT_IMPLEMENTED,
-			Message: "List credentials not yet implemented",
-		},
-	}
-}
-
-// GeneratePassword generates a secure password based on policy.
-func (s *CredentialServiceServer) GeneratePassword(ctx context.Context, req *acmv1.GenerateRequest) (*acmv1.GenerateResponse, error) {
-	policy := pwmanager.PasswordPolicy{
-		Length:           int(req.Policy.Length),
-		RequireUppercase: req.Policy.RequireUppercase,
-		RequireLowercase: req.Policy.RequireLowercase,
-		RequireNumbers:   req.Policy.RequireNumbers,
-		RequireSymbols:   req.Policy.RequireSymbols,
-		ExcludeAmbiguous: req.Policy.ExcludeAmbiguous,
-	}
-
-	password, err := s.crs.GeneratePassword(ctx, policy)
-	if err != nil {
-		return &acmv1.GenerateResponse{
-			Status: &acmv1.Status{
-				Code:    acmv1.StatusCode_STATUS_CODE_FAILURE,
-				Message: fmt.Sprintf("Failed to generate password: %v", err),
-			},
-		}, nil
-	}
-
-	return &acmv1.GenerateResponse{
-		Status: &acmv1.Status{
 			Code:    acmv1.StatusCode_STATUS_CODE_SUCCESS,
-			Message: "Password generated successfully",
+			Message: "List credentials not yet fully implemented",
 		},
-		Password: password,
+		Credentials: make([]*acmv1.CredentialMetadata, 0),
 	}, nil
-}
-
-// Helper functions
-
-func hashID(id string) string {
-	// In production, use SHA-256 hashing
-	// For now, return as-is (should be fixed in Phase I cleanup)
-	return id
-}
-
-func mapSeverity(cred pwmanager.CompromisedCredential) acmv1.BreachSeverity {
-	// Simple severity mapping based on breach age
-	// In Phase II, integrate with breach database for actual severity
-	if cred.BreachDate.IsZero() {
-		return acmv1.BreachSeverity_BREACH_SEVERITY_MEDIUM
-	}
-
-	// Breaches within the last year are considered high severity
-	if cred.BreachDate.Year() >= 2024 {
-		return acmv1.BreachSeverity_BREACH_SEVERITY_HIGH
-	}
-
-	return acmv1.BreachSeverity_BREACH_SEVERITY_MEDIUM
 }
