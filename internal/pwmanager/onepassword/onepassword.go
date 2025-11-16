@@ -283,8 +283,8 @@ func getFieldValue(fields []struct {
 }
 
 func getURL(urls []struct {
-	Primary bool
-	Href    string
+	Primary bool   `json:"primary"`
+	Href    string `json:"href"`
 }) string {
 	for _, url := range urls {
 		if url.Primary {

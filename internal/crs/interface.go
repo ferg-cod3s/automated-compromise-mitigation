@@ -127,6 +127,9 @@ const (
 	// ErrCLINotFound indicates the password manager CLI is not installed.
 	ErrCLINotFound RotationErrorCode = "CLI_NOT_FOUND"
 
+	// ErrPasswordManagerUnavailable indicates no password manager is configured.
+	ErrPasswordManagerUnavailable RotationErrorCode = "PASSWORD_MANAGER_UNAVAILABLE"
+
 	// ErrNetworkRequired indicates network access is required.
 	ErrNetworkRequired RotationErrorCode = "NETWORK_REQUIRED"
 

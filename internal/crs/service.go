@@ -32,6 +32,14 @@ func NewService(pm pwmanager.PasswordManager, auditer audit.Logger) *Service {
 
 // DetectCompromised queries the password manager for credentials exposed in breaches.
 func (s *Service) DetectCompromised(ctx context.Context) ([]pwmanager.CompromisedCredential, error) {
+	if s.pwManager == nil {
+		return nil, &RotationError{
+			Code:      ErrPasswordManagerUnavailable,
+			Message:   "No password manager configured. Please install and configure Bitwarden or 1Password CLI.",
+			Retryable: false,
+		}
+	}
+
 	creds, err := s.pwManager.DetectCompromised(ctx)
 	if err != nil {
 		// Log detection failure
@@ -142,6 +150,19 @@ func (s *Service) RotateCredential(ctx context.Context, cred pwmanager.Compromis
 		CredentialID: hashCredentialID(cred.ID),
 		Status:       RotationPending,
 		StartTime:    startTime,
+	}
+
+	// Check if password manager is available
+	if s.pwManager == nil {
+		result.Status = RotationFailure
+		result.Error = &RotationError{
+			Code:      ErrPasswordManagerUnavailable,
+			Message:   "No password manager configured. Please install and configure Bitwarden or 1Password CLI.",
+			Retryable: false,
+		}
+		result.EndTime = time.Now()
+		result.Duration = result.EndTime.Sub(startTime)
+		return result, result.Error
 	}
 
 	// Step 1: Validate inputs

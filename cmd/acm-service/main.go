@@ -27,7 +27,9 @@ import (
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/audit"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/auth"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/crs"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager/bitwarden"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager/onepassword"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/server"
 )
 
@@ -81,11 +83,23 @@ func run(ctx context.Context) error {
 
 	// Initialize password manager (try Bitwarden first)
 	log.Println("Detecting password manager...")
-	pwManager, err := bitwarden.New()
+	var pwManager pwmanager.PasswordManager
+	bwManager, err := bitwarden.New()
 	if err != nil {
 		log.Printf("Warning: Bitwarden CLI not found: %v", err)
-		log.Println("Service will start but credential operations will fail until a password manager is configured")
-		// Continue anyway - service can still be tested
+		log.Println("Trying 1Password...")
+		opManager, err := onepassword.New()
+		if err != nil {
+			log.Printf("Warning: 1Password CLI not found: %v", err)
+			log.Println("⚠ Service will start but credential operations will fail until a password manager is configured")
+			pwManager = nil
+		} else {
+			pwManager = opManager
+			log.Println("✓ Using 1Password")
+		}
+	} else {
+		pwManager = bwManager
+		log.Println("✓ Using Bitwarden")
 	}
 
 	// Initialize CRS
