@@ -224,6 +224,12 @@ func run(ctx context.Context, logger *logging.Logger) error {
 	grpcServer.GracefulStop()
 
 	logger.Info("ACM service stopped", "service", serviceName)
+
+	// Shutdown logging system (flush and close log files)
+	if err := logging.Shutdown(); err != nil {
+		logger.Error("Failed to shutdown logging", "error", err)
+	}
+
 	return nil
 }
 

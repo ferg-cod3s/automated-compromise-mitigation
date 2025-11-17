@@ -457,3 +457,27 @@ func BenchmarkIsSensitiveKey(b *testing.B) {
 		}
 	}
 }
+
+func TestShouldRedactAttribute(t *testing.T) {
+	tests := []struct {
+		key      string
+		expected bool
+	}{
+		{"password", true},
+		{"token", true},
+		{"api_key", true},
+		{"secret", true},
+		{"username", false},
+		{"email", false},
+		{"data", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			result := ShouldRedactAttribute(tt.key)
+			if result != tt.expected {
+				t.Errorf("ShouldRedactAttribute(%q) = %v, want %v", tt.key, result, tt.expected)
+			}
+		})
+	}
+}

@@ -30,8 +30,9 @@ type Logger struct {
 
 // Global logger instance (default)
 var (
-	globalLogger *Logger
-	once         sync.Once
+	globalLogger     *Logger
+	globalLogCleanup func() error
+	once             sync.Once
 )
 
 // Initialize initializes the global logging system.
@@ -39,6 +40,21 @@ var (
 func Initialize(config Config) error {
 	var initErr error
 	once.Do(func() {
+		// Validate configuration
+		if err := config.Validate(); err != nil {
+			initErr = err
+			return
+		}
+
+		// Setup output with rotation if configured
+		output, cleanup, err := SetupOutput(&config)
+		if err != nil {
+			initErr = err
+			return
+		}
+		globalLogCleanup = cleanup
+		config.Output = output
+
 		handler, err := createHandler(config)
 		if err != nil {
 			initErr = err
@@ -55,6 +71,15 @@ func Initialize(config Config) error {
 	})
 
 	return initErr
+}
+
+// Shutdown gracefully shuts down the logging system.
+// This should be called during application shutdown to flush and close log files.
+func Shutdown() error {
+	if globalLogCleanup != nil {
+		return globalLogCleanup()
+	}
+	return nil
 }
 
 // Default returns the global logger instance.
