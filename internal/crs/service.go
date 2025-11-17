@@ -90,27 +90,41 @@ func (s *Service) GeneratePassword(ctx context.Context, policy pwmanager.Passwor
 		}
 	}
 
-	// Build character set
+	// Build character sets for each category
+	lowercase := "abcdefghijklmnopqrstuvwxyz"
+	uppercase := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	numbers := "0123456789"
+	symbols := "!@#$%^&*()_+-=[]{}|;:,.<>?"
+
+	if policy.ExcludeAmbiguous {
+		// Remove ambiguous characters: 0, O, o, l, 1, I
+		lowercase = removeChars(lowercase, "ol")
+		uppercase = removeChars(uppercase, "OI")
+		numbers = removeChars(numbers, "01")
+	}
+
+	// Build full charset and required charsets
+	var requiredSets []string
 	charset := ""
+
 	if policy.CustomCharset != "" {
 		charset = policy.CustomCharset
 	} else {
 		if policy.RequireLowercase {
-			charset += "abcdefghijklmnopqrstuvwxyz"
+			charset += lowercase
+			requiredSets = append(requiredSets, lowercase)
 		}
 		if policy.RequireUppercase {
-			charset += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+			charset += uppercase
+			requiredSets = append(requiredSets, uppercase)
 		}
 		if policy.RequireNumbers {
-			charset += "0123456789"
+			charset += numbers
+			requiredSets = append(requiredSets, numbers)
 		}
 		if policy.RequireSymbols {
-			charset += "!@#$%^&*()_+-=[]{}|;:,.<>?"
-		}
-
-		if policy.ExcludeAmbiguous {
-			// Remove ambiguous characters: 0, O, o, l, 1, I
-			charset = removeChars(charset, "0Ool1I")
+			charset += symbols
+			requiredSets = append(requiredSets, symbols)
 		}
 	}
 
@@ -122,11 +136,31 @@ func (s *Service) GeneratePassword(ctx context.Context, policy pwmanager.Passwor
 		}
 	}
 
-	// Generate password using crypto/rand
+	// Generate password ensuring all requirements are met
 	password := make([]byte, policy.Length)
-	charsetLen := big.NewInt(int64(len(charset)))
 
-	for i := 0; i < policy.Length; i++ {
+	// Step 1: Add at least one character from each required set
+	position := 0
+	for _, reqSet := range requiredSets {
+		if position >= policy.Length {
+			break
+		}
+		randomIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(reqSet))))
+		if err != nil {
+			return "", &RotationError{
+				Code:      ErrPasswordGenerationFailed,
+				Message:   "Failed to generate secure random number",
+				Cause:     err,
+				Retryable: true,
+			}
+		}
+		password[position] = reqSet[randomIndex.Int64()]
+		position++
+	}
+
+	// Step 2: Fill remaining positions with random characters from full charset
+	charsetLen := big.NewInt(int64(len(charset)))
+	for i := position; i < policy.Length; i++ {
 		randomIndex, err := rand.Int(rand.Reader, charsetLen)
 		if err != nil {
 			return "", &RotationError{
@@ -137,6 +171,21 @@ func (s *Service) GeneratePassword(ctx context.Context, policy pwmanager.Passwor
 			}
 		}
 		password[i] = charset[randomIndex.Int64()]
+	}
+
+	// Step 3: Shuffle the password to randomize positions
+	for i := policy.Length - 1; i > 0; i-- {
+		randomIndex, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			return "", &RotationError{
+				Code:      ErrPasswordGenerationFailed,
+				Message:   "Failed to shuffle password",
+				Cause:     err,
+				Retryable: true,
+			}
+		}
+		j := randomIndex.Int64()
+		password[i], password[j] = password[j], password[i]
 	}
 
 	return string(password), nil
