@@ -13,7 +13,7 @@ import (
 	"time"
 
 	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
-	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvs"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvsif"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -55,7 +55,7 @@ func NewSQLiteEvidenceChainGeneratorWithKeys(db *sql.DB, privateKey ed25519.Priv
 }
 
 // AddEntry adds a new entry to the evidence chain.
-func (g *SQLiteEvidenceChainGenerator) AddEntry(ctx context.Context, entry *acvs.EvidenceEntry) (string, error) {
+func (g *SQLiteEvidenceChainGenerator) AddEntry(ctx context.Context, entry *acvsif.EvidenceEntry) (string, error) {
 	if entry == nil {
 		return "", fmt.Errorf("entry cannot be nil")
 	}
@@ -257,7 +257,7 @@ func (g *SQLiteEvidenceChainGenerator) GetEntry(ctx context.Context, entryID str
 }
 
 // Export exports evidence entries for a time range or credential.
-func (g *SQLiteEvidenceChainGenerator) Export(ctx context.Context, req *acvs.ExportRequest) ([]*acmv1.EvidenceChainEntry, error) {
+func (g *SQLiteEvidenceChainGenerator) Export(ctx context.Context, req *acvsif.ExportRequest) ([]*acmv1.EvidenceChainEntry, error) {
 	query := `
 		SELECT
 			id, timestamp, event_type, site, credential_id_hash,
@@ -540,7 +540,7 @@ func (g *SQLiteEvidenceChainGenerator) Clear(ctx context.Context) error {
 // Helper functions
 
 // generateEntryID generates a unique ID for an evidence entry.
-func generateEntryID(entry *acvs.EvidenceEntry) string {
+func generateEntryID(entry *acvsif.EvidenceEntry) string {
 	now := time.Now().Unix()
 	data := fmt.Sprintf("%d:%s:%s:%v", now, entry.Site, entry.CredentialIDHash, entry.EventType)
 	hash := sha256.Sum256([]byte(data))

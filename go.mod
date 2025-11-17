@@ -61,4 +61,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251111163417-95abcf5c77ba // indirect
 	google.golang.org/grpc v1.76.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	modernc.org/sqlite v1.33.1
 )

@@ -3,9 +3,13 @@ package github
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
+	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvsif"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/rotation"
 )
 
@@ -15,13 +19,15 @@ import (
 type Rotator struct {
 	client     *Client
 	stateStore rotation.StateStore
+	acvs       acvsif.Service
 }
 
 // NewRotator creates a new GitHub PAT rotator.
-func NewRotator(stateStore rotation.StateStore) *Rotator {
+func NewRotator(stateStore rotation.StateStore, acvsService acvsif.Service) *Rotator {
 	return &Rotator{
 		client:     NewClient(),
 		stateStore: stateStore,
+		acvs:       acvsService,
 	}
 }
 
@@ -76,6 +82,44 @@ func (r *Rotator) StartRotation(ctx context.Context, req RotationRequest) (*Rota
 		}, nil
 	}
 
+	site := req.Site
+	if site == "" {
+		site = "github.com"
+	}
+
+	// Step 2: ACVS validation (if enabled)
+	var crcID string
+	if r.acvs != nil && r.acvs.IsEnabled() {
+		action := &acmv1.AutomationAction{
+			Type:   acmv1.ActionType_ACTION_TYPE_CREDENTIAL_ROTATION,
+			Method: acmv1.AutomationMethod_AUTOMATION_METHOD_MANUAL, // Semi-automated
+			Context: map[string]string{
+				"token_type": "github_pat",
+				"username":   user.Login,
+			},
+		}
+
+		validation, err := r.acvs.ValidateAction(ctx, site, action)
+		if err != nil {
+			return &RotationResult{
+				Success:  false,
+				NextStep: StepFailed,
+				Error:    fmt.Errorf("ACVS validation failed: %w", err),
+			}, nil
+		}
+
+		// Check validation result
+		if validation.Result == acmv1.ValidationResult_VALIDATION_RESULT_BLOCKED {
+			return &RotationResult{
+				Success:  false,
+				NextStep: StepFailed,
+				Error:    fmt.Errorf("GitHub ToS prohibits this type of rotation: %s", validation.Reasoning),
+			}, nil
+		}
+
+		crcID = validation.CRCID
+	}
+
 	// Create rotation state
 	state := rotation.RotationState{
 		ID:           rotation.GenerateStateID(),
@@ -87,7 +131,8 @@ func (r *Rotator) StartRotation(ctx context.Context, req RotationRequest) (*Rota
 		ExpiresAt:    time.Now().Add(24 * time.Hour), // 24 hour timeout
 		Metadata: map[string]string{
 			"username": user.Login,
-			"site":     req.Site,
+			"site":     site,
+			"crc_id":   crcID,
 		},
 	}
 
@@ -97,7 +142,7 @@ func (r *Rotator) StartRotation(ctx context.Context, req RotationRequest) (*Rota
 	}
 
 	// Return instructions for user
-	instructions := r.generateCreationInstructions(user.Login, req.Site)
+	instructions := r.generateCreationInstructions(user.Login, site)
 
 	return &RotationResult{
 		Success:      true,
@@ -182,10 +227,45 @@ func (r *Rotator) ConfirmDeletion(ctx context.Context, stateID string) (*Rotatio
 	// Mark as complete
 	state.State = string(StepComplete)
 	state.UpdatedAt = time.Now()
-	state.Metadata["completed_at"] = time.Now().Format(time.RFC3339)
+	completedAt := time.Now()
+	state.Metadata["completed_at"] = completedAt.Format(time.RFC3339)
 
 	if err := r.stateStore.SaveState(ctx, state); err != nil {
 		return nil, fmt.Errorf("failed to update state: %w", err)
+	}
+
+	// Add evidence chain entry (if ACVS enabled)
+	if r.acvs != nil && r.acvs.IsEnabled() {
+		credentialIDHash := hashCredentialID(state.CredentialID)
+
+		entry := &acvsif.EvidenceEntry{
+			EventType:        acmv1.EvidenceEventType_EVIDENCE_EVENT_TYPE_ROTATION,
+			Site:             state.Metadata["site"],
+			CredentialIDHash: credentialIDHash,
+			Action: &acmv1.AutomationAction{
+				Type:   acmv1.ActionType_ACTION_TYPE_CREDENTIAL_ROTATION,
+				Method: acmv1.AutomationMethod_AUTOMATION_METHOD_MANUAL,
+				Context: map[string]string{
+					"rotation_type": "semi_automated",
+					"provider":      "github",
+				},
+			},
+			ValidationResult: acmv1.ValidationResult_VALIDATION_RESULT_ALLOWED,
+			CRCID:            state.Metadata["crc_id"],
+			AppliedRuleIDs:   []string{},
+			EvidenceData: map[string]interface{}{
+				"rotation_id":   state.ID,
+				"started_at":    state.StartedAt.Format(time.RFC3339),
+				"completed_at":  completedAt.Format(time.RFC3339),
+				"duration_mins": completedAt.Sub(state.StartedAt).Minutes(),
+				"username":      state.Metadata["username"],
+			},
+		}
+
+		if _, err := r.acvs.AddEvidenceEntry(ctx, entry); err != nil {
+			// Log error but don't fail the rotation
+			// Evidence chain is for audit, not critical path
+		}
 	}
 
 	// Clean up state after 7 days (keep for audit purposes)
@@ -196,7 +276,7 @@ func (r *Rotator) ConfirmDeletion(ctx context.Context, stateID string) (*Rotatio
 		Success:     true,
 		State:       state,
 		NextStep:    StepComplete,
-		CompletedAt: time.Now(),
+		CompletedAt: completedAt,
 	}, nil
 }
 
@@ -298,7 +378,7 @@ before deleting the old one!
 // ListActiveRotations returns all active (incomplete) rotations.
 func (r *Rotator) ListActiveRotations(ctx context.Context) ([]rotation.RotationState, error) {
 	return r.stateStore.ListStates(ctx, rotation.StateFilter{
-		Provider:     "github",
+		Provider:      "github",
 		ExcludeStates: []string{string(StepComplete), "cancelled"},
 	})
 }
@@ -306,4 +386,10 @@ func (r *Rotator) ListActiveRotations(ctx context.Context) ([]rotation.RotationS
 // CleanupExpiredStates removes expired rotation states.
 func (r *Rotator) CleanupExpiredStates(ctx context.Context) (int, error) {
 	return r.stateStore.CleanupExpired(ctx)
+}
+
+// hashCredentialID creates a SHA-256 hash of a credential ID for privacy.
+func hashCredentialID(credentialID string) string {
+	hash := sha256.Sum256([]byte(credentialID))
+	return hex.EncodeToString(hash[:])
 }

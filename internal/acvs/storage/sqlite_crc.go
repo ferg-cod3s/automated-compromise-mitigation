@@ -9,7 +9,7 @@ import (
 	"time"
 
 	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
-	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvs"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvsif"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	_ "modernc.org/sqlite" // SQLite driver
@@ -170,7 +170,7 @@ func (m *SQLiteCRCManager) Get(ctx context.Context, site string) (*acmv1.Complia
 }
 
 // List returns all cached CRCs matching the filter.
-func (m *SQLiteCRCManager) List(ctx context.Context, siteFilter string, includeExpired bool) ([]acvs.CRCSummary, error) {
+func (m *SQLiteCRCManager) List(ctx context.Context, siteFilter string, includeExpired bool) ([]acvsif.CRCSummary, error) {
 	query := `
 		SELECT
 			id, site, parsed_at, expires_at, recommendation,
@@ -201,7 +201,7 @@ func (m *SQLiteCRCManager) List(ctx context.Context, siteFilter string, includeE
 	}
 	defer rows.Close()
 
-	var summaries []acvs.CRCSummary
+	var summaries []acvsif.CRCSummary
 	now := time.Now()
 
 	for rows.Next() {
@@ -218,7 +218,7 @@ func (m *SQLiteCRCManager) List(ctx context.Context, siteFilter string, includeE
 		expiresAtTime := time.Unix(expiresAt, 0)
 		expired := now.After(expiresAtTime)
 
-		summary := acvs.CRCSummary{
+		summary := acvsif.CRCSummary{
 			ID:             id,
 			Site:           site,
 			ParsedAt:       time.Unix(parsedAt, 0),
