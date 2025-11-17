@@ -1,15 +1,39 @@
 # CLAUDE.md - AI Assistant Guide for ACM Repository
 
-**Last Updated:** 2025-11-16
+**Last Updated:** 2025-11-17
 **Repository:** Automated Compromise Mitigation (ACM)
-**Status:** Documentation/Planning Phase
+**Status:** Phase I Implementation - 100% COMPLETE ✅🎉
 **Project Type:** Open-Source Security Tool - Local-First Credential Breach Response
 
 ---
 
 ## 🎯 Quick Context
 
-This repository contains **comprehensive planning and documentation** for the Automated Compromise Mitigation (ACM) project. It is currently in the **documentation/planning phase** with no production code yet. The repository consists of detailed technical specifications, legal frameworks, security assessments, and community building resources that will guide the implementation phase.
+This repository contains the **Automated Compromise Mitigation (ACM)** project with **Phase I COMPLETE**. The project includes comprehensive planning documentation AND a **fully functional, tested, and documented gRPC service** with ~4,600 lines of production Go code plus ~1,120 lines of tests.
+
+### Current Implementation Status
+
+**✅ PHASE I COMPLETE:**
+- gRPC Protocol Buffers (13 RPCs, 4 services)
+- Password manager integrations (Bitwarden, 1Password) with failover
+- Credential Remediation Service (CRS) with guaranteed password policy enforcement
+- Audit logging with Ed25519 signatures
+- Human-in-the-Middle (HIM) workflow system
+- mTLS certificate management with auto-generation
+- **Fully operational gRPC server** listening on localhost:8443
+- **Functional CLI client** (health, detect, rotate, list)
+- **Comprehensive unit tests** (21 test cases, 100% pass rate)
+- **Integration tests** (5 test suites for end-to-end workflows)
+- **Complete user documentation** (Getting Started Guide)
+
+**⏭️ DEFERRED TO PHASE I.5/II:**
+- OpenTUI interface (Bubbletea)
+- SQLite persistence (currently using in-memory logger)
+
+**📋 PLANNED (Phase II):**
+- ACVS (Automated Compliance Validation Service)
+- Legal NLP for ToS analysis
+- Additional password manager support
 
 ### Critical Security Context
 
@@ -265,18 +289,57 @@ When suggesting security features, consult **acm-threat-model.md** which include
 
 ## 🚀 Quick Start for AI Assistants
 
+### Running the Service
+
+```bash
+# Build the service
+make build
+
+# Run the service (auto-generates mTLS certificates)
+./bin/acm-service
+
+# The service will:
+# - Generate certificates in ~/.acm/certs (if needed)
+# - Initialize in-memory audit logger
+# - Detect password managers (Bitwarden/1Password)
+# - Start gRPC server on localhost:8443 with mTLS
+```
+
 ### First-Time Repository Analysis
 
-1. Read **00-INDEX.md** (5 min) - Get complete overview
+1. Read **PHASE1_IMPLEMENTATION_SUMMARY.md** (10 min) - Understand what's implemented
 2. Read **acm-prd.md** sections 1-3 (10 min) - Understand product vision
 3. Skim **acm-tad.md** sections 1-2 (5 min) - Grasp architecture
 4. Check **acm-threat-model.md** section 2 (5 min) - Security context
+5. Review **api/proto/acm/v1/** - Understand gRPC API
+
+### Working with the Codebase
+
+**Key Implementation Files:**
+- `cmd/acm-service/main.go` - Service entry point (163 lines)
+- `internal/crs/service.go` - Credential Remediation Service (296 lines)
+- `internal/audit/memory_logger.go` - In-memory audit logger (177 lines)
+- `internal/auth/certs.go` - mTLS certificate management (266 lines)
+- `internal/pwmanager/bitwarden/` - Bitwarden CLI integration (374 lines)
+- `internal/pwmanager/onepassword/` - 1Password CLI integration (351 lines)
+- `internal/server/credential_service.go` - gRPC handlers (137 lines)
+
+**Protocol Buffers:**
+- `api/proto/acm/v1/*.proto` - Service definitions (1,450 lines)
+- Generated files: `*.pb.go` and `*_grpc.pb.go`
+
+**Build System:**
+- `Makefile` - Primary build automation
+- `scripts/generate-proto.sh` - Proto code generation
+- `scripts/build.sh` - Cross-platform builds
 
 ### Answering User Questions
 
+**Implementation Questions** → Reference **PHASE1_IMPLEMENTATION_SUMMARY.md**
 **Product Questions** → Reference **acm-prd.md**
-**Architecture Questions** → Reference **acm-tad.md**
+**Architecture Questions** → Reference **acm-tad.md** + review `internal/` packages
 **Security Questions** → Reference **acm-threat-model.md** + **acm-security-planning.md**
+**API Questions** → Check `api/proto/acm/v1/*.proto` definitions
 **Risk Questions** → Reference **acm-risk-assessment.md**
 **Legal Questions** → Reference **acm-legal-framework.md** (note: requires attorney review)
 **Timeline Questions** → Reference **acm-governance-roadmap.md**

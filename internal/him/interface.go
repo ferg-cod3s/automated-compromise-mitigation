@@ -67,26 +67,6 @@ const (
 	ActionEmailChange ActionType = "email_change"
 )
 
-// HIMType indicates the specific type of HIM intervention required.
-type HIMType string
-
-const (
-	// HIMMFA indicates multi-factor authentication is required.
-	HIMMFA HIMType = "mfa"
-
-	// HIMCAPTCHAsolve indicates CAPTCHA solving is required.
-	HIMCAPTCHAsolve HIMType = "captcha"
-
-	// HIMManualIntervention indicates manual user action is required.
-	HIMManualIntervention HIMType = "manual"
-
-	// HIMToSReview indicates Terms of Service review and acknowledgment is required.
-	HIMToSReview HIMType = "tos_review"
-
-	// HIMConfirmation indicates user confirmation is required before proceeding.
-	HIMConfirmation HIMType = "confirmation"
-)
-
 // HIMPrompt represents a prompt sent to the user during HIM workflow.
 type HIMPrompt struct {
 	// SessionID uniquely identifies this HIM session.
@@ -181,35 +161,6 @@ type HIMSessionState struct {
 	// MaxAttempts is the maximum number of attempts allowed.
 	MaxAttempts int
 }
-
-// SessionState represents the state of a HIM session in the state machine.
-type SessionState string
-
-const (
-	// StateCreated indicates the session was just created.
-	StateCreated SessionState = "created"
-
-	// StateAwaitingInput indicates waiting for user input.
-	StateAwaitingInput SessionState = "awaiting_input"
-
-	// StateValidating indicates validating user input.
-	StateValidating SessionState = "validating"
-
-	// StateResuming indicates resuming automation after successful input.
-	StateResuming SessionState = "resuming"
-
-	// StateCompleted indicates the session completed successfully.
-	StateCompleted SessionState = "completed"
-
-	// StateFailed indicates the session failed (invalid input, timeout, etc.).
-	StateFailed SessionState = "failed"
-
-	// StateCancelled indicates the session was cancelled by the user.
-	StateCancelled SessionState = "cancelled"
-
-	// StateExpired indicates the session expired due to timeout.
-	StateExpired SessionState = "expired"
-)
 
 // HIMError represents an error during HIM operations.
 type HIMError struct {
