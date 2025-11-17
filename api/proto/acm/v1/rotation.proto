@@ -1,0 +1,282 @@
+// Copyright 2025 ACM Project
+// SPDX-License-Identifier: Apache-2.0
+
+// Rotation Service API definitions.
+// This service provides provider-specific credential rotation workflows,
+// starting with GitHub Personal Access Token (PAT) rotation.
+
+syntax = "proto3";
+
+package acm.v1;
+
+import "acm/v1/common.proto";
+
+option go_package = "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1;acmv1";
+
+// RotationService provides provider-specific credential rotation workflows.
+// Unlike the general CredentialService which handles password manager vault updates,
+// this service handles API-based rotations for services like GitHub, AWS IAM, etc.
+service RotationService {
+  // StartGitHubRotation initiates a GitHub PAT rotation workflow.
+  // This is a semi-automated process that validates the current token,
+  // checks ToS compliance (if ACVS enabled), and provides step-by-step
+  // instructions for creating a new token.
+  rpc StartGitHubRotation(StartGitHubRotationRequest) returns (StartGitHubRotationResponse);
+
+  // VerifyNewToken verifies a newly created token and updates rotation state.
+  // This validates that the new token works and belongs to the correct user.
+  rpc VerifyNewToken(VerifyNewTokenRequest) returns (VerifyNewTokenResponse);
+
+  // ConfirmDeletion confirms that the old token has been deleted, completing the rotation.
+  // This adds an entry to the evidence chain (if ACVS enabled) and marks rotation complete.
+  rpc ConfirmDeletion(ConfirmDeletionRequest) returns (ConfirmDeletionResponse);
+
+  // GetGitHubRotationStatus gets the current status of a GitHub rotation.
+  rpc GetGitHubRotationStatus(GetGitHubRotationStatusRequest) returns (GetGitHubRotationStatusResponse);
+
+  // CancelGitHubRotation cancels an in-progress GitHub rotation.
+  rpc CancelGitHubRotation(CancelGitHubRotationRequest) returns (CancelGitHubRotationResponse);
+
+  // ListActiveGitHubRotations lists all active (incomplete) GitHub rotations.
+  rpc ListActiveGitHubRotations(ListActiveGitHubRotationsRequest) returns (ListActiveGitHubRotationsResponse);
+}
+
+// StartGitHubRotationRequest initiates a GitHub PAT rotation.
+message StartGitHubRotationRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Credential ID from password manager (will be hashed)
+  string credential_id = 2;
+
+  // Current GitHub PAT to validate
+  string current_token = 3;
+
+  // GitHub site (default: "github.com", can be GitHub Enterprise URL)
+  string site = 4;
+
+  // GitHub username (optional, will be auto-detected from token)
+  string username = 5;
+}
+
+// StartGitHubRotationResponse contains the result of initiating rotation.
+message StartGitHubRotationResponse {
+  // Response status
+  Status status = 1;
+
+  // Rotation state ID for tracking
+  string state_id = 2;
+
+  // Next step in the workflow
+  GitHubRotationStep next_step = 3;
+
+  // Step-by-step instructions for the user
+  string instructions = 4;
+
+  // Detected GitHub username
+  string username = 5;
+
+  // ACVS validation result (if enabled)
+  string crc_id = 6;
+
+  // Error details if validation failed
+  Error error = 7;
+}
+
+// VerifyNewTokenRequest verifies a newly created token.
+message VerifyNewTokenRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Rotation state ID from StartGitHubRotationResponse
+  string state_id = 2;
+
+  // Newly created GitHub PAT
+  string new_token = 3;
+}
+
+// VerifyNewTokenResponse contains the result of token verification.
+message VerifyNewTokenResponse {
+  // Response status
+  Status status = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+
+  // Next step in the workflow
+  GitHubRotationStep next_step = 3;
+
+  // Instructions for next step (deletion)
+  string instructions = 4;
+
+  // Error details if verification failed
+  Error error = 5;
+}
+
+// ConfirmDeletionRequest confirms old token deletion.
+message ConfirmDeletionRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+}
+
+// ConfirmDeletionResponse contains the result of completing rotation.
+message ConfirmDeletionResponse {
+  // Response status
+  Status status = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+
+  // Completion timestamp (Unix seconds)
+  int64 completed_at = 3;
+
+  // Evidence chain entry ID (if ACVS enabled)
+  string evidence_id = 4;
+
+  // Error details if failed
+  Error error = 5;
+}
+
+// GetGitHubRotationStatusRequest queries rotation status.
+message GetGitHubRotationStatusRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+}
+
+// GetGitHubRotationStatusResponse contains current rotation status.
+message GetGitHubRotationStatusResponse {
+  // Response status
+  Status status = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+
+  // Current step in the workflow
+  GitHubRotationStep current_step = 3;
+
+  // GitHub site
+  string site = 4;
+
+  // GitHub username
+  string username = 5;
+
+  // When rotation started (Unix seconds)
+  int64 started_at = 6;
+
+  // When rotation last updated (Unix seconds)
+  int64 updated_at = 7;
+
+  // When rotation state expires (Unix seconds)
+  int64 expires_at = 8;
+
+  // Error details if in failed state
+  Error error = 9;
+}
+
+// CancelGitHubRotationRequest cancels a rotation.
+message CancelGitHubRotationRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+}
+
+// CancelGitHubRotationResponse contains the result of cancellation.
+message CancelGitHubRotationResponse {
+  // Response status
+  Status status = 1;
+
+  // Rotation state ID
+  string state_id = 2;
+
+  // Error details if failed
+  Error error = 3;
+}
+
+// ListActiveGitHubRotationsRequest lists active rotations.
+message ListActiveGitHubRotationsRequest {
+  // Request metadata for tracing and audit
+  Metadata metadata = 1;
+
+  // Optional filter by site
+  string site = 2;
+
+  // Optional filter by username
+  string username = 3;
+}
+
+// ListActiveGitHubRotationsResponse contains active rotations.
+message ListActiveGitHubRotationsResponse {
+  // Response status
+  Status status = 1;
+
+  // List of active rotations
+  repeated GitHubRotationState rotations = 2;
+
+  // Total count
+  int32 total_count = 3;
+
+  // Error details if failed
+  Error error = 4;
+}
+
+// GitHubRotationState represents an active rotation.
+message GitHubRotationState {
+  // Rotation state ID
+  string state_id = 1;
+
+  // Credential ID hash
+  string credential_id_hash = 2;
+
+  // GitHub site
+  string site = 3;
+
+  // GitHub username
+  string username = 4;
+
+  // Current step
+  GitHubRotationStep current_step = 5;
+
+  // Started timestamp (Unix seconds)
+  int64 started_at = 6;
+
+  // Updated timestamp (Unix seconds)
+  int64 updated_at = 7;
+
+  // Expires timestamp (Unix seconds)
+  int64 expires_at = 8;
+
+  // CRC ID (if ACVS enabled)
+  string crc_id = 9;
+}
+
+// GitHubRotationStep represents a step in the semi-automated rotation workflow.
+enum GitHubRotationStep {
+  // Default value, should not be used
+  GITHUB_ROTATION_STEP_UNSPECIFIED = 0;
+
+  // Validating current token and ToS compliance
+  GITHUB_ROTATION_STEP_VALIDATING = 1;
+
+  // Guiding user to create new token
+  GITHUB_ROTATION_STEP_GUIDING = 2;
+
+  // Waiting for user to provide new token
+  GITHUB_ROTATION_STEP_WAITING_TOKEN = 3;
+
+  // Verifying new token works
+  GITHUB_ROTATION_STEP_VERIFYING = 4;
+
+  // Rotation complete
+  GITHUB_ROTATION_STEP_COMPLETE = 5;
+
+  // Rotation failed
+  GITHUB_ROTATION_STEP_FAILED = 6;
+}

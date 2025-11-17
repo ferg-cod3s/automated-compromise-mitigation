@@ -24,10 +24,11 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvs"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/audit"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/auth"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/crs"
-	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvs"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/logging"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager/bitwarden"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager/onepassword"
@@ -41,19 +42,38 @@ const (
 
 func main() {
 	printBanner()
-	log.Printf("%s v%s starting...", serviceName, serviceVersion)
+
+	// Initialize structured logging first
+	config := logging.DefaultConfig()
+	// Use pretty format for development, JSON for production
+	if os.Getenv("ACM_ENV") == "production" {
+		config.Format = logging.FormatJSON
+	} else {
+		config.Format = logging.FormatPretty
+	}
+
+	if err := logging.Initialize(config); err != nil {
+		log.Fatalf("Failed to initialize logging: %v", err)
+	}
+
+	logger := logging.NewLogger("main")
+	logger.Info("ACM service starting",
+		"service", serviceName,
+		"version", serviceVersion,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Initialize services
-	if err := run(ctx); err != nil {
-		log.Fatalf("Service failed: %v", err)
+	if err := run(ctx, logger); err != nil {
+		logger.Error("Service failed", "error", err)
+		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context) error {
-	log.Println("Initializing ACM services...")
+func run(ctx context.Context, logger *logging.Logger) error {
+	logger.Info("Initializing ACM services")
 
 	// Get home directory for data storage
 	home, err := os.UserHomeDir()
@@ -63,7 +83,7 @@ func run(ctx context.Context) error {
 	dataDir := filepath.Join(home, ".acm")
 
 	// Initialize certificate manager
-	log.Println("Setting up mTLS certificates...")
+	logger.Info("Setting up mTLS certificates", "cert_dir", filepath.Join(dataDir, "certs"))
 	certMgr := auth.NewCertManager(filepath.Join(dataDir, "certs"))
 	if err := certMgr.EnsureCertificates(); err != nil {
 		return fmt.Errorf("failed to setup certificates: %w", err)
@@ -75,7 +95,7 @@ func run(ctx context.Context) error {
 	}
 
 	// Initialize audit logger (using in-memory for Phase I)
-	log.Println("Initializing audit logger...")
+	logger.Info("Initializing audit logger")
 	auditLogger, err := audit.NewMemoryLogger()
 	if err != nil {
 		return fmt.Errorf("failed to create audit logger: %w", err)
@@ -83,44 +103,55 @@ func run(ctx context.Context) error {
 	defer auditLogger.Close()
 
 	// Initialize password manager (try Bitwarden first)
-	log.Println("Detecting password manager...")
+	logger.Info("Detecting password manager")
 	var pwManager pwmanager.PasswordManager
 	bwManager, err := bitwarden.New()
 	if err != nil {
-		log.Printf("Warning: Bitwarden CLI not found: %v", err)
-		log.Println("Trying 1Password...")
+		logger.Warn("Bitwarden CLI not found", "error", err)
+		logger.Info("Trying 1Password")
 		opManager, err := onepassword.New()
 		if err != nil {
-			log.Printf("Warning: 1Password CLI not found: %v", err)
-			log.Println("⚠ Service will start but credential operations will fail until a password manager is configured")
+			logger.Warn("1Password CLI not found", "error", err)
+			logger.Warn("Service will start but credential operations will fail until a password manager is configured")
 			pwManager = nil
 		} else {
 			pwManager = opManager
-			log.Println("✓ Using 1Password")
+			logger.Info("Password manager detected", "manager", "1Password")
 		}
 	} else {
 		pwManager = bwManager
-		log.Println("✓ Using Bitwarden")
+		logger.Info("Password manager detected", "manager", "Bitwarden")
 	}
 
 	// Initialize CRS
-	log.Println("Initializing Credential Remediation Service...")
+	logger.Info("Initializing Credential Remediation Service")
 	crsService := crs.NewService(pwManager, auditLogger)
 
 	// Initialize ACVS (Phase II)
-	log.Println("Initializing Automated Compliance Validation Service...")
+	logger.Info("Initializing Automated Compliance Validation Service")
 	acvsService, err := acvs.NewService()
 	if err != nil {
 		return fmt.Errorf("failed to create ACVS: %w", err)
 	}
-	log.Println("✓ ACVS initialized (disabled by default - use EnableACVS RPC to opt-in)")
+	logger.Info("ACVS initialized", "enabled_by_default", false)
 
-	// Create gRPC server with mTLS
-	log.Println("Starting gRPC server...")
+	// Create gRPC server with mTLS and logging middleware
+	logger.Info("Starting gRPC server with middleware")
 	creds := credentials.NewTLS(tlsConfig)
+
+	// Create server logger for gRPC middleware
+	grpcLogger := logging.NewLogger("grpc")
+
 	grpcServer := grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.MaxRecvMsgSize(10*1024*1024), // 10MB max message size
+		// Add request ID and logging interceptors
+		grpc.ChainUnaryInterceptor(
+			logging.UnaryServerInterceptor(grpcLogger),
+		),
+		grpc.ChainStreamInterceptor(
+			logging.StreamServerInterceptor(grpcLogger),
+		),
 	)
 
 	// Register services
@@ -135,10 +166,9 @@ func run(ctx context.Context) error {
 	healthServer := &server.HealthServiceServer{}
 	acmv1.RegisterHealthServiceServer(grpcServer, healthServer)
 
-	log.Println("Services registered:")
-	log.Println("  ✓ CredentialService")
-	log.Println("  ✓ ACVSService (Phase II)")
-	log.Println("  ✓ HealthService")
+	logger.Info("Services registered",
+		"services", []string{"CredentialService", "ACVSService", "HealthService"},
+	)
 
 	// Start listening
 	listenAddr := "127.0.0.1:8443"
@@ -154,22 +184,26 @@ func run(ctx context.Context) error {
 	// Start server in goroutine
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("✓ %s ready and listening on %s (mTLS enabled)", serviceName, listenAddr)
-		log.Println("")
-		log.Println("Phase I & II Status:")
-		log.Println("  ✓ gRPC server running with mTLS")
-		log.Println("  ✓ Password manager integrations ready")
-		log.Println("  ✓ CRS (Credential Remediation Service)")
-		log.Println("  ✓ ACVS (Automated Compliance Validation Service)")
-		log.Println("  ✓ Evidence Chain with cryptographic signatures")
-		log.Println("  ✓ Legal NLP engine (stub implementation)")
-		log.Println("  ✓ Audit logging with Ed25519 signatures")
-		log.Println("  ✓ HIM (Human-in-the-Middle) workflow system")
-		log.Println("")
-		log.Printf("Certificates location: %s", filepath.Join(dataDir, "certs"))
-		log.Printf("Audit database: %s", filepath.Join(dataDir, "audit.db"))
-		log.Println("")
-		log.Println("Service ready for client connections!")
+		logger.Info("ACM service ready",
+			"address", listenAddr,
+			"mtls", true,
+			"cert_dir", filepath.Join(dataDir, "certs"),
+			"audit_db", filepath.Join(dataDir, "audit.db"),
+		)
+
+		logger.Info("Phase I & II components active",
+			"grpc_server", true,
+			"mtls", true,
+			"password_managers", pwManager != nil,
+			"crs", true,
+			"acvs", true,
+			"evidence_chain", true,
+			"legal_nlp", "stub",
+			"audit_logging", true,
+			"him_workflows", true,
+		)
+
+		logger.Info("Service ready for client connections")
 
 		if err := grpcServer.Serve(listener); err != nil {
 			errCh <- fmt.Errorf("server failed: %w", err)
@@ -179,17 +213,17 @@ func run(ctx context.Context) error {
 	// Wait for shutdown signal or error
 	select {
 	case sig := <-sigCh:
-		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+		logger.Info("Shutdown signal received", "signal", sig.String())
 	case err := <-errCh:
-		log.Printf("Server error: %v", err)
+		logger.Error("Server error", "error", err)
 		return err
 	}
 
 	// Graceful shutdown
-	log.Println("Stopping gRPC server...")
+	logger.Info("Stopping gRPC server")
 	grpcServer.GracefulStop()
 
-	log.Printf("%s stopped", serviceName)
+	logger.Info("ACM service stopped", "service", serviceName)
 	return nil
 }
 

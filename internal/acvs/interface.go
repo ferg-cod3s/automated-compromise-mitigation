@@ -8,6 +8,7 @@ import (
 	"time"
 
 	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvsif"
 )
 
 // Service defines the main ACVS service interface.
@@ -68,24 +69,12 @@ type ValidationResult struct {
 }
 
 // CRCSummary provides a summary of a cached CRC.
-type CRCSummary struct {
-	ID             string
-	Site           string
-	ParsedAt       time.Time
-	ExpiresAt      time.Time
-	Recommendation acmv1.ComplianceRecommendation
-	RuleCount      int32
-	Expired        bool
-}
+// Type alias to acvsif.CRCSummary to avoid import cycles.
+type CRCSummary = acvsif.CRCSummary
 
 // ExportRequest specifies parameters for evidence chain export.
-type ExportRequest struct {
-	CredentialID     string
-	StartTime        time.Time
-	EndTime          time.Time
-	Format           acmv1.EvidenceExportFormat
-	IncludeCRCSnapshots bool
-}
+// Type alias to acvsif.ExportRequest to avoid import cycles.
+type ExportRequest = acvsif.ExportRequest
 
 // Status represents the current ACVS operational status.
 type Status struct {
@@ -180,16 +169,8 @@ type EvidenceChainGenerator interface {
 }
 
 // EvidenceEntry represents data for a new evidence chain entry.
-type EvidenceEntry struct {
-	EventType          acmv1.EvidenceEventType
-	Site               string
-	CredentialIDHash   string
-	Action             *acmv1.AutomationAction
-	ValidationResult   acmv1.ValidationResult
-	CRCID              string
-	AppliedRuleIDs     []string
-	EvidenceData       map[string]interface{}
-}
+// Type alias to acvsif.EvidenceEntry to avoid import cycles.
+type EvidenceEntry = acvsif.EvidenceEntry
 
 // NLPEngine interfaces with the Legal NLP engine for ToS analysis.
 type NLPEngine interface {
