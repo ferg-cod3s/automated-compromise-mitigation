@@ -1,6 +1,8 @@
 package evidence
 
 import (
+	"time"
+
 	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
 )
 
@@ -14,4 +16,13 @@ type Entry struct {
 	CRCID              string
 	AppliedRuleIDs     []string
 	EvidenceData       map[string]interface{}
+}
+
+// ExportRequest specifies parameters for evidence chain export.
+type ExportRequest struct {
+	CredentialID        string
+	StartTime           time.Time
+	EndTime             time.Time
+	Format              acmv1.EvidenceExportFormat
+	IncludeCRCSnapshots bool
 }

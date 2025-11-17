@@ -132,7 +132,7 @@ func (g *ChainGenerator) GetEntry(ctx context.Context, entryID string) (*acmv1.E
 }
 
 // Export exports evidence entries for a time range or credential.
-func (g *ChainGenerator) Export(ctx context.Context, req *acvs.ExportRequest) ([]*acmv1.EvidenceChainEntry, error) {
+func (g *ChainGenerator) Export(ctx context.Context, req *ExportRequest) ([]*acmv1.EvidenceChainEntry, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 

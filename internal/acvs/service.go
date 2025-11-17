@@ -20,12 +20,12 @@ import (
 type ACVSService struct {
 	mu sync.RWMutex
 
-	// Core components
-	crcManager      CRCManager
-	validator       Validator
-	evidenceChain   EvidenceChainGenerator
-	nlpEngine       NLPEngine
-	tosFetcher      ToSFetcher
+	// Core components (using concrete types to avoid interface matching issues)
+	crcManager      *crc.Manager
+	validator       *validator.Validator
+	evidenceChain   *evidence.ChainGenerator
+	nlpEngine       *nlp.Engine
+	tosFetcher      *SimpleToSFetcher
 
 	// Configuration
 	enabled            bool
@@ -250,8 +250,9 @@ func (s *ACVSService) ValidateAction(ctx context.Context, site string, action *a
 	credHash := s.hashCredentialID(credentialID)
 
 	// Log evidence
+	var evidenceID string
 	if s.evidenceChainEnabled {
-		evidenceID, err := s.evidenceChain.AddEntry(ctx, &evidence.Entry{
+		eid, err := s.evidenceChain.AddEntry(ctx, &evidence.Entry{
 			EventType:        acmv1.EvidenceEventType_EVIDENCE_EVENT_TYPE_VALIDATION,
 			Site:             site,
 			CredentialIDHash: credHash,
@@ -268,7 +269,7 @@ func (s *ACVSService) ValidateAction(ctx context.Context, site string, action *a
 			// Log but don't fail
 			fmt.Printf("Warning: failed to log evidence: %v\n", err)
 		} else {
-			result.EvidenceEntryID = evidenceID
+			evidenceID = eid
 		}
 	}
 
@@ -283,7 +284,15 @@ func (s *ACVSService) ValidateAction(ctx context.Context, site string, action *a
 		s.incrementStat("validations_blocked")
 	}
 
-	return result, nil
+	// Convert validator.Result to acvs.ValidationResult
+	return &ValidationResult{
+		Result:            result.Result,
+		RecommendedMethod: result.RecommendedMethod,
+		ApplicableRuleIDs: result.ApplicableRuleIDs,
+		Reasoning:         result.Reasoning,
+		EvidenceEntryID:   evidenceID,
+		ErrorMessage:      result.ErrorMessage,
+	}, nil
 }
 
 // GetCRC retrieves a cached CRC.
@@ -341,7 +350,16 @@ func (s *ACVSService) ExportEvidenceChain(ctx context.Context, req *ExportReques
 		return nil, fmt.Errorf("evidence chain not enabled")
 	}
 
-	return s.evidenceChain.Export(ctx, req)
+	// Convert to evidence.ExportRequest
+	evidenceReq := &evidence.ExportRequest{
+		CredentialID:        req.CredentialID,
+		StartTime:           req.StartTime,
+		EndTime:             req.EndTime,
+		Format:              req.Format,
+		IncludeCRCSnapshots: req.IncludeCRCSnapshots,
+	}
+
+	return s.evidenceChain.Export(ctx, evidenceReq)
 }
 
 // GetStatus returns current ACVS status.
@@ -370,10 +388,10 @@ func (s *ACVSService) GetStatistics(ctx context.Context) (*Statistics, error) {
 	defer s.mu.RUnlock()
 
 	// Get cache stats
-	cacheStats := s.crcManager.(*crc.Manager).GetCacheStats()
+	cacheStats := s.crcManager.GetCacheStats()
 
 	s.stats.CRCsCached = int32(cacheStats.ValidEntries)
-	s.stats.EvidenceEntries = int64(s.evidenceChain.(*evidence.ChainGenerator).GetChainLength())
+	s.stats.EvidenceEntries = int64(s.evidenceChain.GetChainLength())
 
 	return &s.stats, nil
 }
@@ -426,5 +444,5 @@ func (s *ACVSService) SetConfiguration(config Configuration) {
 	s.crcManager.SetCacheTTL(ttl)
 
 	// Update validator default
-	s.validator.(*validator.Validator).SetDefaultOnUncertain(config.DefaultOnUncertain)
+	s.validator.SetDefaultOnUncertain(config.DefaultOnUncertain)
 }

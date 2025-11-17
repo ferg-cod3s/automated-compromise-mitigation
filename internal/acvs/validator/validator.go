@@ -9,7 +9,6 @@ import (
 	"time"
 
 	acmv1 "github.com/ferg-cod3s/automated-compromise-mitigation/api/proto/acm/v1"
-	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvs"
 )
 
 // Validator implements the Validator interface for compliance validation.
@@ -44,7 +43,7 @@ func NewValidatorWithDefaults(defaultOnUncertain acmv1.ValidationResult) *Valida
 }
 
 // Validate performs pre-flight validation of an automation action against CRC rules.
-func (v *Validator) Validate(ctx context.Context, crc *acmv1.ComplianceRuleSet, action *acmv1.AutomationAction) (*acvs.ValidationResult, error) {
+func (v *Validator) Validate(ctx context.Context, crc *acmv1.ComplianceRuleSet, action *acmv1.AutomationAction) (*Result, error) {
 	if crc == nil {
 		return nil, fmt.Errorf("CRC cannot be nil")
 	}
@@ -87,7 +86,7 @@ func (v *Validator) Validate(ctx context.Context, crc *acmv1.ComplianceRuleSet, 
 		ruleIDs[i] = rule.Id
 	}
 
-	return &acvs.ValidationResult{
+	return &Result{
 		Result:            result,
 		RecommendedMethod: method,
 		ApplicableRuleIDs: ruleIDs,
@@ -286,11 +285,11 @@ func (v *Validator) recommendationToValidationResult(rec acmv1.ComplianceRecomme
 }
 
 // validateWithOverallRecommendation uses the CRC's overall recommendation when no specific rules apply.
-func (v *Validator) validateWithOverallRecommendation(crc *acmv1.ComplianceRuleSet, action *acmv1.AutomationAction) *acvs.ValidationResult {
+func (v *Validator) validateWithOverallRecommendation(crc *acmv1.ComplianceRuleSet, action *acmv1.AutomationAction) *Result {
 	result := v.recommendationToValidationResult(crc.Recommendation)
 	method := v.RecommendMethod(crc.Recommendation, action)
 
-	return &acvs.ValidationResult{
+	return &Result{
 		Result:            result,
 		RecommendedMethod: method,
 		ApplicableRuleIDs: []string{},
