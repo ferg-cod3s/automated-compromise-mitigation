@@ -4,7 +4,13 @@ package rotation
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"time"
+)
+
+// Common errors
+var (
+	ErrStateNotFound = errors.New("rotation state not found")
 )
 
 // RotationState represents the persistent state of a credential rotation.
