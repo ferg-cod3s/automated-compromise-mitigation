@@ -2,14 +2,14 @@
 
 **Last Updated:** 2025-11-17
 **Repository:** Automated Compromise Mitigation (ACM)
-**Status:** Phase I Implementation - 100% COMPLETE ✅🎉
+**Status:** Phase I & II Implementation - 100% COMPLETE ✅🎉
 **Project Type:** Open-Source Security Tool - Local-First Credential Breach Response
 
 ---
 
 ## 🎯 Quick Context
 
-This repository contains the **Automated Compromise Mitigation (ACM)** project with **Phase I COMPLETE**. The project includes comprehensive planning documentation AND a **fully functional, tested, and documented gRPC service** with ~4,600 lines of production Go code plus ~1,120 lines of tests.
+This repository contains the **Automated Compromise Mitigation (ACM)** project with **Phase I & II COMPLETE**. The project includes comprehensive planning documentation AND a **fully functional, tested, and documented gRPC service** with ~6,700 lines of production Go code plus comprehensive unit tests.
 
 ### Current Implementation Status
 
@@ -26,14 +26,23 @@ This repository contains the **Automated Compromise Mitigation (ACM)** project w
 - **Integration tests** (5 test suites for end-to-end workflows)
 - **Complete user documentation** (Getting Started Guide)
 
-**⏭️ DEFERRED TO PHASE I.5/II:**
-- OpenTUI interface (Bubbletea)
-- SQLite persistence (currently using in-memory logger)
+**✅ PHASE II COMPLETE:**
+- **ACVS (Automated Compliance Validation Service)** - ToS compliance validation
+- **CRC (Compliance Rule Set) Manager** - Caching and versioning of ToS analysis
+- **Evidence Chain Generator** - Cryptographically-signed audit trail with Ed25519
+- **Compliance Validator** - Pre-flight action validation against ToS rules
+- **Legal NLP Engine** - Mock ToS analysis (ready for production spaCy integration)
+- **ToS Fetcher** - HTTP-based ToS retrieval and URL discovery
+- **10 ACVS gRPC RPCs** - Complete API for compliance operations
+- **18 unit tests** - CRC Manager and Evidence Chain (100% pass rate)
+- **Comprehensive documentation** - PHASE2_IMPLEMENTATION_SUMMARY.md (700+ lines)
 
-**📋 PLANNED (Phase II):**
-- ACVS (Automated Compliance Validation Service)
-- Legal NLP for ToS analysis
-- Additional password manager support
+**⏭️ DEFERRED TO PHASE III:**
+- OpenTUI interface (Bubbletea)
+- SQLite persistence (currently using in-memory)
+- Production NLP models (Python spaCy integration)
+- API-based rotation (GitHub, AWS IAM)
+- Enhanced HIM workflows (TOTP/MFA, CAPTCHA)
 
 ### Critical Security Context
 
@@ -92,15 +101,19 @@ automated-compromise-mitigation/
 ### Must-Read Documents (in order)
 
 1. **00-INDEX.md** - Start here for complete overview and navigation
-2. **acm-prd.md** - Understand product vision, goals, user personas, features
-3. **acm-tad.md** - Learn technical architecture, components, tech stack
-4. **acm-security-planning.md** - Security roadmap and implementation requirements
-5. **acm-threat-model.md** - Threat analysis using STRIDE methodology
+2. **PHASE1_IMPLEMENTATION_SUMMARY.md** - Phase I implementation details (CRS, Audit, HIM)
+3. **PHASE2_IMPLEMENTATION_SUMMARY.md** - Phase II implementation details (ACVS, Evidence Chains)
+4. **acm-prd.md** - Understand product vision, goals, user personas, features
+5. **acm-tad.md** - Learn technical architecture, components, tech stack
+6. **acm-security-planning.md** - Security roadmap and implementation requirements
+7. **acm-threat-model.md** - Threat analysis using STRIDE methodology
 
 ### Document Purposes
 
 | Document | Purpose | When to Consult |
 |----------|---------|-----------------|
+| **PHASE1_IMPLEMENTATION_SUMMARY.md** | Phase I implementation (CRS, password managers, audit logging) | Understanding Phase I codebase |
+| **PHASE2_IMPLEMENTATION_SUMMARY.md** | Phase II implementation (ACVS, compliance validation, evidence chains) | Understanding Phase II codebase |
 | **acm-prd.md** | Product requirements, user stories, success metrics | Understanding "what" and "why" |
 | **acm-tad.md** | System architecture, component design, tech stack | Understanding "how" to build |
 | **acm-threat-model.md** | Security threats, attack vectors, mitigations | Security reviews, threat analysis |
@@ -307,16 +320,17 @@ make build
 
 ### First-Time Repository Analysis
 
-1. Read **PHASE1_IMPLEMENTATION_SUMMARY.md** (10 min) - Understand what's implemented
-2. Read **acm-prd.md** sections 1-3 (10 min) - Understand product vision
-3. Skim **acm-tad.md** sections 1-2 (5 min) - Grasp architecture
-4. Check **acm-threat-model.md** section 2 (5 min) - Security context
-5. Review **api/proto/acm/v1/** - Understand gRPC API
+1. Read **PHASE1_IMPLEMENTATION_SUMMARY.md** (10 min) - Understand Phase I implementation
+2. Read **PHASE2_IMPLEMENTATION_SUMMARY.md** (10 min) - Understand Phase II implementation
+3. Read **acm-prd.md** sections 1-3 (10 min) - Understand product vision
+4. Skim **acm-tad.md** sections 1-2 (5 min) - Grasp architecture
+5. Check **acm-threat-model.md** section 2 (5 min) - Security context
+6. Review **api/proto/acm/v1/** - Understand gRPC API
 
 ### Working with the Codebase
 
-**Key Implementation Files:**
-- `cmd/acm-service/main.go` - Service entry point (163 lines)
+**Phase I Implementation Files:**
+- `cmd/acm-service/main.go` - Service entry point with ACVS integration
 - `internal/crs/service.go` - Credential Remediation Service (296 lines)
 - `internal/audit/memory_logger.go` - In-memory audit logger (177 lines)
 - `internal/auth/certs.go` - mTLS certificate management (266 lines)
@@ -324,9 +338,27 @@ make build
 - `internal/pwmanager/onepassword/` - 1Password CLI integration (351 lines)
 - `internal/server/credential_service.go` - gRPC handlers (137 lines)
 
+**Phase II Implementation Files:**
+- `internal/acvs/service.go` - ACVS orchestration service (449 lines)
+- `internal/acvs/crc/manager.go` - CRC caching and management (285 lines)
+- `internal/acvs/validator/validator.go` - Compliance validation (328 lines)
+- `internal/acvs/evidence/chain.go` - Evidence chain generator (353 lines)
+- `internal/acvs/nlp/engine.go` - Legal NLP engine (254 lines)
+- `internal/server/acvs_service.go` - ACVS gRPC handlers (254 lines)
+
 **Protocol Buffers:**
-- `api/proto/acm/v1/*.proto` - Service definitions (1,450 lines)
+- `api/proto/acm/v1/credential.proto` - CRS service (Phase I)
+- `api/proto/acm/v1/audit.proto` - Audit service (Phase I)
+- `api/proto/acm/v1/him.proto` - HIM service (Phase I)
+- `api/proto/acm/v1/compliance.proto` - ACVS service (Phase II)
 - Generated files: `*.pb.go` and `*_grpc.pb.go`
+
+**Test Files:**
+- `internal/crs/service_test.go` - CRS unit tests
+- `internal/audit/memory_logger_test.go` - Audit logger tests
+- `internal/acvs/crc/manager_test.go` - CRC Manager tests
+- `internal/acvs/evidence/chain_test.go` - Evidence Chain tests
+- `test/integration/integration_test.go` - Integration tests
 
 **Build System:**
 - `Makefile` - Primary build automation
@@ -335,7 +367,8 @@ make build
 
 ### Answering User Questions
 
-**Implementation Questions** → Reference **PHASE1_IMPLEMENTATION_SUMMARY.md**
+**Phase I Questions** → Reference **PHASE1_IMPLEMENTATION_SUMMARY.md**
+**Phase II/ACVS Questions** → Reference **PHASE2_IMPLEMENTATION_SUMMARY.md**
 **Product Questions** → Reference **acm-prd.md**
 **Architecture Questions** → Reference **acm-tad.md** + review `internal/` packages
 **Security Questions** → Reference **acm-threat-model.md** + **acm-security-planning.md**

@@ -27,6 +27,7 @@ import (
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/audit"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/auth"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/crs"
+	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/acvs"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager/bitwarden"
 	"github.com/ferg-cod3s/automated-compromise-mitigation/internal/pwmanager/onepassword"
@@ -106,6 +107,14 @@ func run(ctx context.Context) error {
 	log.Println("Initializing Credential Remediation Service...")
 	crsService := crs.NewService(pwManager, auditLogger)
 
+	// Initialize ACVS (Phase II)
+	log.Println("Initializing Automated Compliance Validation Service...")
+	acvsService, err := acvs.NewService()
+	if err != nil {
+		return fmt.Errorf("failed to create ACVS: %w", err)
+	}
+	log.Println("✓ ACVS initialized (disabled by default - use EnableACVS RPC to opt-in)")
+
 	// Create gRPC server with mTLS
 	log.Println("Starting gRPC server...")
 	creds := credentials.NewTLS(tlsConfig)
@@ -118,12 +127,17 @@ func run(ctx context.Context) error {
 	credentialServer := server.NewCredentialServiceServer(crsService)
 	acmv1.RegisterCredentialServiceServer(grpcServer, credentialServer)
 
+	// ACVS service (Phase II)
+	acvsServer := server.NewACVSServiceServer(acvsService)
+	acmv1.RegisterACVSServiceServer(grpcServer, acvsServer)
+
 	// Health service
 	healthServer := &server.HealthServiceServer{}
 	acmv1.RegisterHealthServiceServer(grpcServer, healthServer)
 
 	log.Println("Services registered:")
 	log.Println("  ✓ CredentialService")
+	log.Println("  ✓ ACVSService (Phase II)")
 	log.Println("  ✓ HealthService")
 
 	// Start listening
@@ -142,10 +156,13 @@ func run(ctx context.Context) error {
 	go func() {
 		log.Printf("✓ %s ready and listening on %s (mTLS enabled)", serviceName, listenAddr)
 		log.Println("")
-		log.Println("Phase I Status:")
+		log.Println("Phase I & II Status:")
 		log.Println("  ✓ gRPC server running with mTLS")
 		log.Println("  ✓ Password manager integrations ready")
 		log.Println("  ✓ CRS (Credential Remediation Service)")
+		log.Println("  ✓ ACVS (Automated Compliance Validation Service)")
+		log.Println("  ✓ Evidence Chain with cryptographic signatures")
+		log.Println("  ✓ Legal NLP engine (stub implementation)")
 		log.Println("  ✓ Audit logging with Ed25519 signatures")
 		log.Println("  ✓ HIM (Human-in-the-Middle) workflow system")
 		log.Println("")

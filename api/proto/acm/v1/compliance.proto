@@ -1,0 +1,549 @@
+// compliance.proto
+// Automated Compliance Validation Service (ACVS)
+// Phase II - ToS compliance validation and evidence chains
+
+syntax = "proto3";
+
+package acm.v1;
+
+option go_package = "github.com/acm-project/acm/api/proto/acm/v1;acmv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================
+// ACVS Service Definition
+// ============================================================================
+
+// ACVSService provides Terms of Service compliance validation and evidence
+// chain generation for automated credential rotation actions.
+//
+// ACVS is an opt-in service that:
+// - Parses website Terms of Service using Legal NLP
+// - Validates automation actions against ToS rules
+// - Generates cryptographically-signed evidence chains
+// - Provides compliance proof for legal defense
+service ACVSService {
+  // AnalyzeToS fetches and analyzes a website's Terms of Service,
+  // generating a structured Compliance Rule Set (CRC).
+  rpc AnalyzeToS(AnalyzeToSRequest) returns (AnalyzeToSResponse);
+
+  // ValidateAction performs a pre-flight check to determine if an
+  // automation action is permitted under the target site's ToS.
+  rpc ValidateAction(ValidateActionRequest) returns (ValidateActionResponse);
+
+  // GetCRC retrieves a cached Compliance Rule Set for a given site.
+  rpc GetCRC(GetCRCRequest) returns (GetCRCResponse);
+
+  // ListCRCs lists all cached Compliance Rule Sets.
+  rpc ListCRCs(ListCRCsRequest) returns (ListCRCsResponse);
+
+  // InvalidateCRC removes a cached CRC, forcing re-analysis on next use.
+  rpc InvalidateCRC(InvalidateCRCRequest) returns (InvalidateCRCResponse);
+
+  // ExportEvidenceChain exports the evidence chain for a given time range
+  // or specific credential rotation.
+  rpc ExportEvidenceChain(ExportEvidenceChainRequest) returns (stream EvidenceChainEntry);
+
+  // GetACVSStatus returns the current ACVS opt-in status and configuration.
+  rpc GetACVSStatus(GetACVSStatusRequest) returns (GetACVSStatusResponse);
+
+  // EnableACVS opts the user into ACVS (requires EULA acceptance).
+  rpc EnableACVS(EnableACVSRequest) returns (EnableACVSResponse);
+
+  // DisableACVS opts the user out of ACVS.
+  rpc DisableACVS(DisableACVSRequest) returns (DisableACVSResponse);
+}
+
+// ============================================================================
+// ToS Analysis Request/Response
+// ============================================================================
+
+message AnalyzeToSRequest {
+  // Site domain (e.g., "github.com")
+  string site = 1;
+
+  // Optional explicit ToS URL (if not provided, ACVS will discover it)
+  string tos_url = 2;
+
+  // Force re-analysis even if cached CRC exists
+  bool force_refresh = 3;
+
+  // Maximum analysis timeout in seconds (default: 30s)
+  int32 timeout_seconds = 4;
+}
+
+message AnalyzeToSResponse {
+  // Analysis status
+  AnalysisStatus status = 1;
+
+  // Generated or retrieved Compliance Rule Set
+  ComplianceRuleSet crc = 2;
+
+  // Error message if analysis failed
+  string error_message = 3;
+
+  // Analysis metadata
+  AnalysisMetadata metadata = 4;
+}
+
+enum AnalysisStatus {
+  ANALYSIS_STATUS_UNSPECIFIED = 0;
+  ANALYSIS_STATUS_SUCCESS = 1;
+  ANALYSIS_STATUS_CACHED = 2;         // Returned from cache
+  ANALYSIS_STATUS_FAILED = 3;         // NLP analysis failed
+  ANALYSIS_STATUS_TOS_NOT_FOUND = 4;  // Could not locate ToS page
+  ANALYSIS_STATUS_TIMEOUT = 5;        // Analysis exceeded timeout
+  ANALYSIS_STATUS_DISABLED = 6;       // ACVS not enabled
+}
+
+message AnalysisMetadata {
+  // How long the analysis took (milliseconds)
+  int64 duration_ms = 1;
+
+  // Whether this was served from cache
+  bool from_cache = 2;
+
+  // Cache age in seconds (if from_cache = true)
+  int64 cache_age_seconds = 3;
+
+  // NLP model version used
+  string nlp_model_version = 4;
+
+  // Number of ToS sections analyzed
+  int32 sections_analyzed = 5;
+
+  // Number of rules extracted
+  int32 rules_extracted = 6;
+}
+
+// ============================================================================
+// Compliance Rule Set (CRC)
+// ============================================================================
+
+message ComplianceRuleSet {
+  // Unique identifier for this CRC
+  string id = 1;
+
+  // Target site domain
+  string site = 2;
+
+  // URL of the analyzed ToS document
+  string tos_url = 3;
+
+  // ToS version identifier (date or version string)
+  string tos_version = 4;
+
+  // SHA-256 hash of ToS content
+  string tos_hash = 5;
+
+  // When this CRC was parsed
+  google.protobuf.Timestamp parsed_at = 6;
+
+  // When this CRC expires from cache
+  google.protobuf.Timestamp expires_at = 7;
+
+  // Extracted compliance rules
+  repeated ComplianceRule rules = 8;
+
+  // Overall recommendation for this site
+  ComplianceRecommendation recommendation = 9;
+
+  // Reasoning for the recommendation
+  string reasoning = 10;
+
+  // Cryptographic signature of this CRC (Ed25519)
+  string signature = 11;
+}
+
+message ComplianceRule {
+  // Unique rule ID (e.g., "CRC-001")
+  string id = 1;
+
+  // Rule category
+  RuleCategory category = 2;
+
+  // Severity level
+  RuleSeverity severity = 3;
+
+  // Human-readable rule description
+  string rule = 4;
+
+  // Extracted text from ToS that supports this rule
+  string extracted_text = 5;
+
+  // NLP confidence score (0.0 - 1.0)
+  float confidence = 6;
+
+  // Structured implications of this rule
+  RuleImplications implications = 7;
+}
+
+enum RuleCategory {
+  RULE_CATEGORY_UNSPECIFIED = 0;
+  RULE_CATEGORY_AUTOMATION = 1;       // Automation policies
+  RULE_CATEGORY_RATE_LIMITING = 2;    // Rate limit rules
+  RULE_CATEGORY_API_USAGE = 3;        // API usage terms
+  RULE_CATEGORY_SCRAPING = 4;         // Web scraping restrictions
+  RULE_CATEGORY_ACCOUNT_SHARING = 5;  // Account sharing rules
+  RULE_CATEGORY_BOTS = 6;             // Bot usage policies
+  RULE_CATEGORY_CREDENTIALS = 7;      // Credential management rules
+}
+
+enum RuleSeverity {
+  RULE_SEVERITY_UNSPECIFIED = 0;
+  RULE_SEVERITY_INFO = 1;       // Informational only
+  RULE_SEVERITY_LOW = 2;        // Minor restriction
+  RULE_SEVERITY_MEDIUM = 3;     // Moderate restriction
+  RULE_SEVERITY_HIGH = 4;       // Significant restriction
+  RULE_SEVERITY_CRITICAL = 5;   // Explicit prohibition
+}
+
+message RuleImplications {
+  // Whether API-based automation is explicitly allowed
+  bool allows_api_automation = 1;
+
+  // Whether human interaction is required
+  bool requires_human_interaction = 2;
+
+  // Rate limit if specified
+  RateLimit rate_limit = 3;
+
+  // Whether credential rotation is mentioned
+  bool mentions_credential_rotation = 4;
+
+  // Whether MFA is required
+  bool requires_mfa = 5;
+
+  // Additional free-form metadata
+  map<string, string> metadata = 6;
+}
+
+message RateLimit {
+  // Number of requests allowed
+  int32 requests = 1;
+
+  // Time window (e.g., "1h", "24h", "60s")
+  string window = 2;
+
+  // Per-user or per-IP
+  string scope = 3;
+}
+
+enum ComplianceRecommendation {
+  COMPLIANCE_RECOMMENDATION_UNSPECIFIED = 0;
+  COMPLIANCE_RECOMMENDATION_ALLOWED = 1;           // Automation is safe
+  COMPLIANCE_RECOMMENDATION_ALLOWED_WITH_API = 2;  // Use API if available
+  COMPLIANCE_RECOMMENDATION_HIM_REQUIRED = 3;      // Human interaction needed
+  COMPLIANCE_RECOMMENDATION_BLOCKED = 4;           // Automation prohibited
+  COMPLIANCE_RECOMMENDATION_UNCERTAIN = 5;         // Unable to determine
+}
+
+// ============================================================================
+// Action Validation Request/Response
+// ============================================================================
+
+message ValidateActionRequest {
+  // Site to validate action against
+  string site = 1;
+
+  // Action being attempted
+  AutomationAction action = 2;
+
+  // Credential ID (for evidence chain)
+  string credential_id = 3;
+
+  // Force re-fetch of ToS (ignore cache)
+  bool force_refresh = 4;
+}
+
+message AutomationAction {
+  // Type of action
+  ActionType type = 1;
+
+  // Method of automation
+  AutomationMethod method = 2;
+
+  // Additional context
+  map<string, string> context = 3;
+}
+
+enum ActionType {
+  ACTION_TYPE_UNSPECIFIED = 0;
+  ACTION_TYPE_CREDENTIAL_ROTATION = 1;
+  ACTION_TYPE_PASSWORD_CHANGE = 2;
+  ACTION_TYPE_MFA_SETUP = 3;
+  ACTION_TYPE_ACCOUNT_RECOVERY = 4;
+  ACTION_TYPE_DATA_EXPORT = 5;
+}
+
+enum AutomationMethod {
+  AUTOMATION_METHOD_UNSPECIFIED = 0;
+  AUTOMATION_METHOD_API = 1;           // Official API
+  AUTOMATION_METHOD_UI_SCRIPT = 2;     // Browser automation
+  AUTOMATION_METHOD_CLI = 3;           // Command-line tool
+  AUTOMATION_METHOD_MANUAL = 4;        // Human-in-the-Middle
+}
+
+message ValidateActionResponse {
+  // Validation result
+  ValidationResult result = 1;
+
+  // Method recommended for this action
+  AutomationMethod recommended_method = 2;
+
+  // CRC rules that apply to this action
+  repeated string applicable_rule_ids = 3;
+
+  // Detailed reasoning
+  string reasoning = 4;
+
+  // Evidence chain entry ID (for audit trail)
+  string evidence_entry_id = 5;
+
+  // Error message if validation failed
+  string error_message = 6;
+}
+
+enum ValidationResult {
+  VALIDATION_RESULT_UNSPECIFIED = 0;
+  VALIDATION_RESULT_ALLOWED = 1;      // Action is permitted
+  VALIDATION_RESULT_HIM_REQUIRED = 2; // Requires human interaction
+  VALIDATION_RESULT_BLOCKED = 3;      // Action is prohibited
+  VALIDATION_RESULT_RATE_LIMITED = 4; // Rate limit would be exceeded
+  VALIDATION_RESULT_DISABLED = 5;     // ACVS not enabled
+}
+
+// ============================================================================
+// CRC Retrieval
+// ============================================================================
+
+message GetCRCRequest {
+  // Site domain
+  string site = 1;
+}
+
+message GetCRCResponse {
+  // Status of retrieval
+  CRCStatus status = 1;
+
+  // Retrieved CRC (if found)
+  ComplianceRuleSet crc = 2;
+
+  // Error message if not found
+  string error_message = 3;
+}
+
+enum CRCStatus {
+  CRC_STATUS_UNSPECIFIED = 0;
+  CRC_STATUS_FOUND = 1;
+  CRC_STATUS_NOT_FOUND = 2;
+  CRC_STATUS_EXPIRED = 3;
+  CRC_STATUS_DISABLED = 4;
+}
+
+message ListCRCsRequest {
+  // Optional filter by site pattern
+  string site_filter = 1;
+
+  // Include expired CRCs
+  bool include_expired = 2;
+}
+
+message ListCRCsResponse {
+  // List of CRC summaries
+  repeated CRCSummary crcs = 1;
+}
+
+message CRCSummary {
+  string id = 1;
+  string site = 2;
+  google.protobuf.Timestamp parsed_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  ComplianceRecommendation recommendation = 5;
+  int32 rule_count = 6;
+  bool expired = 7;
+}
+
+message InvalidateCRCRequest {
+  // Site domain to invalidate
+  string site = 1;
+}
+
+message InvalidateCRCResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================================================
+// Evidence Chain
+// ============================================================================
+
+message ExportEvidenceChainRequest {
+  // Optional: Filter by credential ID
+  string credential_id = 1;
+
+  // Optional: Time range
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+
+  // Export format
+  EvidenceExportFormat format = 4;
+
+  // Include CRC snapshots
+  bool include_crc_snapshots = 5;
+}
+
+enum EvidenceExportFormat {
+  EVIDENCE_EXPORT_FORMAT_UNSPECIFIED = 0;
+  EVIDENCE_EXPORT_FORMAT_JSON = 1;
+  EVIDENCE_EXPORT_FORMAT_PDF = 2;
+  EVIDENCE_EXPORT_FORMAT_CSV = 3;
+}
+
+message EvidenceChainEntry {
+  // Unique entry ID
+  string id = 1;
+
+  // Timestamp of event
+  google.protobuf.Timestamp timestamp = 2;
+
+  // Event type
+  EvidenceEventType event_type = 3;
+
+  // Site domain
+  string site = 4;
+
+  // Credential ID (hashed)
+  string credential_id_hash = 5;
+
+  // Action details
+  AutomationAction action = 6;
+
+  // Validation result
+  ValidationResult validation_result = 7;
+
+  // CRC ID used for validation
+  string crc_id = 8;
+
+  // Applied rule IDs
+  repeated string applied_rule_ids = 9;
+
+  // Evidence data (JSON)
+  string evidence_data = 10;
+
+  // Ed25519 signature of this entry
+  string signature = 11;
+
+  // Previous entry ID (for chain integrity)
+  string previous_entry_id = 12;
+
+  // Chain hash (links to previous entry)
+  string chain_hash = 13;
+}
+
+enum EvidenceEventType {
+  EVIDENCE_EVENT_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_EVENT_TYPE_VALIDATION = 1;     // Pre-flight validation
+  EVIDENCE_EVENT_TYPE_ROTATION = 2;       // Credential rotation
+  EVIDENCE_EVENT_TYPE_HIM_PROMPT = 3;     // Human intervention
+  EVIDENCE_EVENT_TYPE_CRC_UPDATE = 4;     // CRC cache update
+  EVIDENCE_EVENT_TYPE_ACVS_ENABLED = 5;   // ACVS opt-in
+  EVIDENCE_EVENT_TYPE_ACVS_DISABLED = 6;  // ACVS opt-out
+}
+
+// ============================================================================
+// ACVS Status & Configuration
+// ============================================================================
+
+message GetACVSStatusRequest {
+  // No parameters
+}
+
+message GetACVSStatusResponse {
+  // Whether ACVS is enabled
+  bool enabled = 1;
+
+  // EULA version accepted
+  string eula_version = 2;
+
+  // When ACVS was enabled
+  google.protobuf.Timestamp enabled_at = 3;
+
+  // Configuration
+  ACVSConfiguration config = 4;
+
+  // Statistics
+  ACVSStatistics stats = 5;
+}
+
+message ACVSConfiguration {
+  // NLP model version
+  string nlp_model_version = 1;
+
+  // CRC cache TTL (seconds)
+  int64 cache_ttl_seconds = 2;
+
+  // Evidence chain enabled
+  bool evidence_chain_enabled = 3;
+
+  // Default validation behavior when uncertain
+  ValidationResult default_on_uncertain = 4;
+
+  // Model path
+  string model_path = 5;
+}
+
+message ACVSStatistics {
+  // Total ToS analyses performed
+  int64 total_analyses = 1;
+
+  // Total validations performed
+  int64 total_validations = 2;
+
+  // Validations allowed
+  int64 validations_allowed = 3;
+
+  // Validations requiring HIM
+  int64 validations_him_required = 4;
+
+  // Validations blocked
+  int64 validations_blocked = 5;
+
+  // CRCs in cache
+  int32 crcs_cached = 6;
+
+  // Evidence chain entries
+  int64 evidence_entries = 7;
+}
+
+message EnableACVSRequest {
+  // EULA version being accepted
+  string eula_version = 1;
+
+  // Explicit user consent
+  bool user_consent = 2;
+
+  // Optional configuration overrides
+  ACVSConfiguration config = 3;
+}
+
+message EnableACVSResponse {
+  bool success = 1;
+  string message = 2;
+
+  // Updated status
+  GetACVSStatusResponse status = 3;
+}
+
+message DisableACVSRequest {
+  // Whether to clear all cached CRCs
+  bool clear_cache = 1;
+
+  // Whether to preserve evidence chain
+  bool preserve_evidence = 2;
+}
+
+message DisableACVSResponse {
+  bool success = 1;
+  string message = 2;
+}
