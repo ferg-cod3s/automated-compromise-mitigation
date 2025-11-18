@@ -14,6 +14,8 @@ require (
 	gotest.tools/gotestsum v1.13.0
 )
 
+require gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+
 require (
 	cloud.google.com/go v0.121.2 // indirect
 	cloud.google.com/go/auth v0.16.5 // indirect
